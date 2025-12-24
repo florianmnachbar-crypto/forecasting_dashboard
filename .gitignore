@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+venv/
+env/
+.env
+*.egg-info/
+dist/
+build/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Project specific
+uploads/
+*.xlsx
+*.xls
+!inputs_forecasting.xlsx
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log

@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Haul EU5 Forecasting Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link rel="stylesheet" href="/static/css/style.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+</head>
+<body>
+    <div class="bg-animation"></div>
+    
+    <!-- Header -->
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">📊</div>
+                <div>
+                    <h1>Amazon Haul EU5</h1>
+                    <span>Forecasting Dashboard v1.1.0</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="theme-toggle" id="themeToggle" title="Toggle Light/Dark Mode">
+                    <i class="fas fa-moon active" id="darkIcon"></i>
+                    <div class="theme-switch"></div>
+                    <i class="fas fa-sun" id="lightIcon"></i>
+                </div>
+                <div class="file-status no-file" id="fileStatus">
+                    <i class="fas fa-file-excel"></i>
+                    <span id="fileName">No file loaded</span>
+                </div>
+                <button class="btn btn-primary" id="uploadBtn">
+                    <i class="fas fa-upload"></i> Upload Data
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-section">
+                <h3><i class="fas fa-sliders-h"></i> Controls</h3>
+                <div class="form-group">
+                    <label>Metric</label>
+                    <select id="metricSelect">
+                        <option value="Net Ordered Units">Net Ordered Units</option>
+                        <option value="Transits">Transits</option>
+                        <option value="Transit Conversion">Transit Conversion</option>
+                        <option value="UPO">Units Per Order (UPO)</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Forecast Model</label>
+                    <select id="modelSelect">
+                        <option value="sarimax">SARIMAX</option>
+                        <option value="prophet">Prophet</option>
+                    </select>
+                </div>
+                <div class="toggle-group">
+                    <span class="toggle-label">Seasonality</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="seasonalityToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3><i class="fas fa-globe-europe"></i> Marketplaces</h3>
+                <div class="mp-list">
+                    <label class="mp-item">
+                        <input type="checkbox" class="mp-checkbox" value="EU5" checked>
+                        <div class="mp-flag eu5">EU5</div>
+                        <span>EU5 (All)</span>
+                    </label>
+                    <label class="mp-item">
+                        <input type="checkbox" class="mp-checkbox" value="UK" checked>
+                        <div class="mp-flag uk">UK</div>
+                        <span>United Kingdom</span>
+                    </label>
+                    <label class="mp-item">
+                        <input type="checkbox" class="mp-checkbox" value="DE" checked>
+                        <div class="mp-flag de">DE</div>
+                        <span>Germany</span>
+                    </label>
+                    <label class="mp-item">
+                        <input type="checkbox" class="mp-checkbox" value="FR" checked>
+                        <div class="mp-flag fr">FR</div>
+                        <span>France</span>
+                    </label>
+                    <label class="mp-item">
+                        <input type="checkbox" class="mp-checkbox" value="IT" checked>
+                        <div class="mp-flag it">IT</div>
+                        <span>Italy</span>
+                    </label>
+                    <label class="mp-item">
+                        <input type="checkbox" class="mp-checkbox" value="ES" checked>
+                        <div class="mp-flag es">ES</div>
+                        <span>Spain</span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3><i class="fas fa-chart-bar"></i> Statistics View</h3>
+                <div class="stats-toggle">
+                    <button class="stats-toggle-btn active" data-view="total">Total</button>
+                    <button class="stats-toggle-btn" data-view="t4w">T4W</button>
+                </div>
+            </div>
+            
+            <div class="model-info" id="modelInfo">
+                <h4>Model Information</h4>
+                <p id="modelName">Model: SARIMAX</p>
+                <p id="modelDetails">Parameters: Auto-fit</p>
+                <p>Confidence Interval: 85%</p>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content" id="mainContent">
+            <!-- Upload Section (shown when no data) -->
+            <section class="upload-section" id="uploadSection">
+                <div class="upload-card">
+                    <h2>Welcome to the Forecasting Dashboard</h2>
+                    <p>Upload your Excel file with historical data to generate forecasts</p>
+                    <div class="dropzone" id="dropzone">
+                        <i class="fas fa-cloud-upload-alt"></i>
+                        <h3>Drop your Excel file here</h3>
+                        <span>or click to browse</span>
+                    </div>
+                    <input type="file" id="fileInput" accept=".xlsx,.xls" hidden>
+                </div>
+            </section>
+
+            <!-- Dashboard Section (shown when data loaded) -->
+            <section class="dashboard-section" id="dashboardSection" style="display: none;">
+                <!-- Statistics -->
+                <div class="section-header">
+                    <h2 class="section-title">
+                        <i class="fas fa-analytics"></i>
+                        Statistics
+                    </h2>
+                    <span class="current-metric" id="currentMetricLabel">Net Ordered Units</span>
+                </div>
+                <div class="stats-grid" id="statsGrid">
+                    <!-- Stats cards populated by JS -->
+                </div>
+
+                <!-- Charts -->
+                <div class="section-header" style="margin-top: 2rem;">
+                    <h2 class="section-title">
+                        <i class="fas fa-chart-line"></i>
+                        Forecasts by Marketplace
+                    </h2>
+                    <button class="btn btn-secondary" id="refreshBtn">
+                        <i class="fas fa-sync-alt"></i> Refresh
+                    </button>
+                </div>
+                <div class="charts-grid" id="chartsGrid">
+                    <!-- Chart cards populated by JS -->
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Footer -->
+    <footer class="footer">
+        Amazon Haul EU5 Forecasting Dashboard v1.1.0 | 85% Confidence Interval | Week format: Sunday-Saturday
+    </footer>
+
+    <!-- Loading Overlay -->
+    <div class="loading-overlay" id="loadingOverlay">
+        <div class="spinner"></div>
+        <span>Processing...</span>
+    </div>
+
+    <!-- Toast Container -->
+    <div class="toast-container" id="toastContainer"></div>
+
+    <script src="/static/js/charts.js"></script>
+</body>
+</html>
