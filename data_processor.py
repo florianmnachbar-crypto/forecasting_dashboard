@@ -1,6 +1,7 @@
 """
 Data Processor for Amazon Haul EU5 Forecasting Dashboard
 Handles Excel file parsing and data transformation
+v2.0.0 - Adds manual forecast support
 """
 
 import pandas as pd
@@ -13,12 +14,20 @@ class DataProcessor:
     """Processes Excel input files for the forecasting dashboard"""
     
     METRICS = ['Net Ordered Units', 'Transits', 'Transit Conversion', 'UPO']
+    # Map alternative metric names
+    METRIC_ALIASES = {
+        'CVR': 'Transit Conversion',
+        'Conversion': 'Transit Conversion',
+    }
     MARKETPLACES = ['UK', 'DE', 'FR', 'IT', 'ES', 'EU5']
     
     def __init__(self):
-        self.data = {}
+        self.data = {}  # Actuals data
+        self.manual_forecast = {}  # Manual forecast data
         self.weeks = []
+        self.forecast_weeks = []
         self.raw_df = None
+        self.has_manual_forecast = False
         
     def parse_week_column(self, col_name):
         """Convert week column name to datetime"""
@@ -54,13 +63,27 @@ class DataProcessor:
     def load_excel(self, file_path):
         """Load and parse the Excel file"""
         try:
-            # Read the Excel file without headers
-            df = pd.read_excel(file_path, sheet_name='Sheet1', header=None)
+            # Check available sheets
+            xl = pd.ExcelFile(file_path)
+            sheet_names = xl.sheet_names
+            print(f"Available sheets: {sheet_names}")
+            
+            # Determine actuals sheet name
+            actuals_sheet = None
+            if 'Actuals' in sheet_names:
+                actuals_sheet = 'Actuals'
+            elif 'Sheet1' in sheet_names:
+                actuals_sheet = 'Sheet1'
+            else:
+                actuals_sheet = sheet_names[0]
+            
+            # Load actuals
+            df = pd.read_excel(file_path, sheet_name=actuals_sheet, header=None)
             self.raw_df = df
             
-            print(f"Excel loaded: {df.shape[0]} rows, {df.shape[1]} columns")
+            print(f"Actuals sheet '{actuals_sheet}': {df.shape[0]} rows, {df.shape[1]} columns")
             
-            # Find all metric sections
+            # Find all metric sections for actuals
             self.data = {}
             
             for metric in self.METRICS:
@@ -72,8 +95,12 @@ class DataProcessor:
             if not self.data:
                 return False, "No data sections found in the Excel file"
             
-            # Recalculate EU5 totals if needed
+            # Recalculate EU5 totals for actuals
             self.calculate_eu5_totals()
+            
+            # Load manual forecast if available
+            if 'Forecast' in sheet_names:
+                self._load_manual_forecast(file_path, 'Forecast')
             
             return True, "File loaded successfully"
             
@@ -82,13 +109,48 @@ class DataProcessor:
             traceback.print_exc()
             return False, f"Error loading file: {str(e)}"
     
-    def _parse_metric_section(self, df, metric_name):
+    def _load_manual_forecast(self, file_path, sheet_name):
+        """Load manual forecast from a separate sheet"""
+        try:
+            df = pd.read_excel(file_path, sheet_name=sheet_name, header=None)
+            print(f"Forecast sheet '{sheet_name}': {df.shape[0]} rows, {df.shape[1]} columns")
+            
+            self.manual_forecast = {}
+            
+            # Search for metrics, including aliases
+            search_metrics = self.METRICS + list(self.METRIC_ALIASES.keys())
+            
+            for search_metric in search_metrics:
+                # Map alias to standard name
+                standard_metric = self.METRIC_ALIASES.get(search_metric, search_metric)
+                
+                # Skip if already parsed
+                if standard_metric in self.manual_forecast:
+                    continue
+                
+                metric_data = self._parse_metric_section(df, search_metric, is_forecast=True)
+                if metric_data:
+                    self.manual_forecast[standard_metric] = metric_data
+                    print(f"Parsed manual forecast {standard_metric}: {list(metric_data.keys())}")
+            
+            if self.manual_forecast:
+                self.has_manual_forecast = True
+                # Recalculate EU5 for manual forecast
+                self.calculate_eu5_totals(is_forecast=True)
+                print("Manual forecast loaded successfully")
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Warning: Could not load manual forecast: {str(e)}")
+    
+    def _parse_metric_section(self, df, metric_name, is_forecast=False):
         """Parse a single metric section from the dataframe"""
         # Find the metric header row
         metric_row, metric_col = self.find_cell_value(df, metric_name)
         
         if metric_row is None:
-            print(f"Could not find metric: {metric_name}")
+            # print(f"Could not find metric: {metric_name}")
             return None
         
         print(f"Found {metric_name} at row {metric_row}, col {metric_col}")
@@ -114,8 +176,6 @@ class DataProcessor:
             print(f"Could not find MP header for {metric_name}")
             return None
         
-        print(f"Found MP header at row {mp_row}, col {header_col}")
-        
         # Parse week columns from the MP row
         weeks = []
         for col_idx in range(week_start_col, len(df.columns)):
@@ -135,9 +195,13 @@ class DataProcessor:
             print(f"No week columns found for {metric_name}")
             return None
         
-        # Store weeks for this metric (use the first one found)
-        if not self.weeks:
-            self.weeks = weeks
+        # Store weeks for this data type
+        if is_forecast:
+            if not self.forecast_weeks:
+                self.forecast_weeks = weeks
+        else:
+            if not self.weeks:
+                self.weeks = weeks
         
         print(f"Found {len(weeks)} weeks")
         
@@ -175,30 +239,33 @@ class DataProcessor:
                 print(f"  {mp_name}: {valid_count} valid data points")
                 
                 metric_data[mp_name] = values
-            elif mp_name in self.METRICS:
+            elif mp_name in self.METRICS or mp_name in self.METRIC_ALIASES:
                 # We've reached the next metric section
                 break
         
         return metric_data if metric_data else None
     
-    def get_dataframe(self, metric, marketplace):
+    def get_dataframe(self, metric, marketplace, is_forecast=False):
         """Get a pandas DataFrame for a specific metric and marketplace"""
-        if metric not in self.data or marketplace not in self.data[metric]:
+        data_source = self.manual_forecast if is_forecast else self.data
+        weeks_source = self.forecast_weeks if is_forecast else self.weeks
+        
+        if metric not in data_source or marketplace not in data_source[metric]:
             return None
         
-        values = self.data[metric][marketplace]
+        values = data_source[metric][marketplace]
         
         # Use only as many weeks as we have values
-        week_count = min(len(values), len(self.weeks))
-        dates = [self.parse_week_column(self.weeks[i]) for i in range(week_count)]
+        week_count = min(len(values), len(weeks_source))
+        dates = [self.parse_week_column(weeks_source[i]) for i in range(week_count)]
         
         df = pd.DataFrame({
             'ds': dates[:len(values)],
             'y': values[:len(dates)],
-            'week': self.weeks[:len(values)]
+            'week': weeks_source[:len(values)]
         })
         
-        # Remove rows with NaN values for cleaner forecasting
+        # Remove rows with NaN values for cleaner data
         df = df.dropna(subset=['y'])
         df = df[df['ds'].notna()]
         
@@ -239,6 +306,113 @@ class DataProcessor:
         
         return result
     
+    def get_manual_forecast_data(self):
+        """Get manual forecast data in a structured format for the frontend"""
+        if not self.has_manual_forecast:
+            return None
+        
+        result = {}
+        
+        for metric in self.METRICS:
+            if metric not in self.manual_forecast:
+                continue
+                
+            result[metric] = {}
+            for mp in self.MARKETPLACES:
+                if mp not in self.manual_forecast[metric]:
+                    continue
+                    
+                df = self.get_dataframe(metric, mp, is_forecast=True)
+                if df is not None and not df.empty:
+                    result[metric][mp] = {
+                        'dates': df['ds'].dt.strftime('%Y-%m-%d').tolist(),
+                        'values': df['y'].tolist(),
+                        'weeks': [self.format_week_label(d) for d in df['ds']],
+                        'week_labels': df['week'].tolist()
+                    }
+        
+        return result
+    
+    def calculate_forecast_accuracy(self, metric, marketplace):
+        """Calculate accuracy metrics for manual forecast vs actuals
+        
+        Returns MAPE, WMAPE, Bias, and Accuracy for overlapping periods
+        """
+        if not self.has_manual_forecast:
+            return None
+        
+        # Get both datasets
+        actuals_df = self.get_dataframe(metric, marketplace, is_forecast=False)
+        forecast_df = self.get_dataframe(metric, marketplace, is_forecast=True)
+        
+        if actuals_df is None or forecast_df is None:
+            return None
+        
+        if actuals_df.empty or forecast_df.empty:
+            return None
+        
+        # Merge on date to find overlapping periods
+        merged = pd.merge(
+            actuals_df[['ds', 'y']].rename(columns={'y': 'actual'}),
+            forecast_df[['ds', 'y']].rename(columns={'y': 'forecast'}),
+            on='ds',
+            how='inner'
+        )
+        
+        if merged.empty or len(merged) < 1:
+            return None
+        
+        # Calculate metrics
+        merged['abs_error'] = abs(merged['actual'] - merged['forecast'])
+        merged['abs_pct_error'] = merged['abs_error'] / merged['actual'].replace(0, np.nan) * 100
+        merged['error'] = merged['forecast'] - merged['actual']
+        
+        # Filter out infinite values
+        valid_data = merged.dropna()
+        
+        if valid_data.empty:
+            return None
+        
+        # MAPE - Mean Absolute Percentage Error
+        mape = valid_data['abs_pct_error'].mean()
+        
+        # WMAPE - Weighted MAPE (weighted by actual values)
+        total_actual = valid_data['actual'].sum()
+        wmape = (valid_data['abs_error'].sum() / total_actual * 100) if total_actual > 0 else np.nan
+        
+        # Bias - Average percentage error (positive = over-forecasting)
+        bias = (valid_data['error'].sum() / total_actual * 100) if total_actual > 0 else np.nan
+        
+        # Accuracy
+        accuracy = max(0, 100 - wmape) if not np.isnan(wmape) else np.nan
+        
+        return {
+            'mape': round(mape, 2) if not np.isnan(mape) else None,
+            'wmape': round(wmape, 2) if not np.isnan(wmape) else None,
+            'bias': round(bias, 2) if not np.isnan(bias) else None,
+            'accuracy': round(accuracy, 2) if not np.isnan(accuracy) else None,
+            'overlap_weeks': len(valid_data),
+            'total_actual': round(total_actual, 2),
+            'total_forecast': round(valid_data['forecast'].sum(), 2),
+            'periods': [d.strftime('%Y-%m-%d') for d in valid_data['ds']]
+        }
+    
+    def get_all_accuracy_metrics(self):
+        """Get forecast accuracy for all metrics and marketplaces"""
+        if not self.has_manual_forecast:
+            return None
+        
+        result = {}
+        
+        for metric in self.METRICS:
+            result[metric] = {}
+            for mp in self.MARKETPLACES:
+                accuracy = self.calculate_forecast_accuracy(metric, mp)
+                if accuracy:
+                    result[metric][mp] = accuracy
+        
+        return result
+    
     def get_summary_statistics(self, metric, marketplace):
         """Calculate summary statistics for a metric/marketplace combination"""
         df = self.get_dataframe(metric, marketplace)
@@ -262,19 +436,20 @@ class DataProcessor:
         
         return stats
     
-    def calculate_eu5_totals(self):
+    def calculate_eu5_totals(self, is_forecast=False):
         """Recalculate EU5 totals from individual marketplace data"""
         individual_mps = ['UK', 'DE', 'FR', 'IT', 'ES']
+        data_source = self.manual_forecast if is_forecast else self.data
         
         for metric in self.METRICS:
-            if metric not in self.data:
+            if metric not in data_source:
                 continue
             
             # Get the length from existing data
             max_len = 0
             for mp in individual_mps:
-                if mp in self.data[metric]:
-                    max_len = max(max_len, len(self.data[metric][mp]))
+                if mp in data_source[metric]:
+                    max_len = max(max_len, len(data_source[metric][mp]))
             
             if max_len == 0:
                 continue
@@ -284,10 +459,10 @@ class DataProcessor:
             valid_counts = [0] * max_len
             
             for mp in individual_mps:
-                if mp not in self.data[metric]:
+                if mp not in data_source[metric]:
                     continue
                     
-                mp_values = self.data[metric][mp]
+                mp_values = data_source[metric][mp]
                 for i, val in enumerate(mp_values):
                     if i < max_len and not np.isnan(val):
                         if np.isnan(eu5_values[i]):
@@ -306,9 +481,10 @@ class DataProcessor:
             if metric == 'Transit Conversion' or metric == 'UPO':
                 eu5_values = [v / c if c > 0 else np.nan for v, c in zip(eu5_values, valid_counts)]
             
-            self.data[metric]['EU5'] = eu5_values
+            data_source[metric]['EU5'] = eu5_values
             valid_count = sum(1 for v in eu5_values if not np.isnan(v))
-            print(f"  EU5 ({metric}): {valid_count} valid data points (calculated)")
+            source_name = "forecast" if is_forecast else "actuals"
+            print(f"  EU5 ({metric}) [{source_name}]: {valid_count} valid data points (calculated)")
 
 
 def test_processor():
@@ -318,7 +494,7 @@ def test_processor():
     print(f"\nLoad result: {success}, {message}")
     
     if success:
-        print("\n=== Data Summary ===")
+        print("\n=== Actuals Data Summary ===")
         all_data = processor.get_all_data()
         for metric in all_data:
             print(f"\n{metric}:")
@@ -328,6 +504,26 @@ def test_processor():
                 if data['values']:
                     print(f"    First: {data['dates'][0]} = {data['values'][0]}")
                     print(f"    Last: {data['dates'][-1]} = {data['values'][-1]}")
+        
+        if processor.has_manual_forecast:
+            print("\n=== Manual Forecast Summary ===")
+            forecast_data = processor.get_manual_forecast_data()
+            for metric in forecast_data:
+                print(f"\n{metric}:")
+                for mp in forecast_data[metric]:
+                    data = forecast_data[metric][mp]
+                    print(f"  {mp}: {len(data['values'])} data points")
+                    if data['values']:
+                        print(f"    First: {data['dates'][0]} = {data['values'][0]}")
+                        print(f"    Last: {data['dates'][-1]} = {data['values'][-1]}")
+            
+            print("\n=== Forecast Accuracy ===")
+            accuracy = processor.get_all_accuracy_metrics()
+            for metric in accuracy:
+                print(f"\n{metric}:")
+                for mp in accuracy[metric]:
+                    acc = accuracy[metric][mp]
+                    print(f"  {mp}: WMAPE={acc['wmape']}%, Accuracy={acc['accuracy']}%, Bias={acc['bias']}%, Overlap={acc['overlap_weeks']} weeks")
 
 
 if __name__ == '__main__':

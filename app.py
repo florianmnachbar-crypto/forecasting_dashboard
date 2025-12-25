@@ -14,7 +14,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "1.3.0"
+APP_VERSION = "2.0.0"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -87,7 +87,7 @@ def upload_file():
 
 @app.route('/api/data', methods=['GET'])
 def get_data():
-    """Get all loaded data"""
+    """Get all loaded data including manual forecast if available"""
     global data_processor
     
     if data_processor is None:
@@ -95,11 +95,45 @@ def get_data():
     
     try:
         data = data_processor.get_all_data()
-        return jsonify({
+        manual_forecast = data_processor.get_manual_forecast_data()
+        
+        response = {
             'success': True,
             'data': data,
             'metrics': DataProcessor.METRICS,
-            'marketplaces': DataProcessor.MARKETPLACES
+            'marketplaces': DataProcessor.MARKETPLACES,
+            'has_manual_forecast': data_processor.has_manual_forecast
+        }
+        
+        if manual_forecast:
+            response['manual_forecast'] = manual_forecast
+        
+        return jsonify(response)
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/accuracy', methods=['GET'])
+def get_accuracy():
+    """Get forecast accuracy metrics for manual forecast vs actuals"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    if not data_processor.has_manual_forecast:
+        return jsonify({
+            'success': True,
+            'has_manual_forecast': False,
+            'accuracy': None
+        })
+    
+    try:
+        accuracy = data_processor.get_all_accuracy_metrics()
+        return jsonify({
+            'success': True,
+            'has_manual_forecast': True,
+            'accuracy': accuracy
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -299,7 +333,8 @@ def get_status():
         'data_loaded': data_processor is not None,
         'current_file': current_file,
         'metrics': DataProcessor.METRICS,
-        'marketplaces': DataProcessor.MARKETPLACES
+        'marketplaces': DataProcessor.MARKETPLACES,
+        'has_manual_forecast': data_processor.has_manual_forecast if data_processor else False
     })
 
 

@@ -1,19 +1,24 @@
 /**
- * Amazon Haul EU5 Forecasting Dashboard - Charts v1.3.0
+ * Amazon Haul EU5 Forecasting Dashboard - Charts v2.0.0
  * Handles data visualization, theme switching, and user interactions
+ * v2.0.0 - Added manual forecast support with toggle and accuracy metrics
  */
 
 // Global state
 const state = {
     data: null,
     forecasts: null,
+    manualForecast: null,
+    accuracy: null,
     statistics: null,
     currentMetric: 'Net Ordered Units',
     selectedMarketplaces: ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'],
     model: 'sarimax',
     seasonality: true,
+    showManualForecast: true,
     statsView: 'total', // 'total' or 't4w'
-    theme: 'dark'
+    theme: 'dark',
+    hasManualForecast: false
 };
 
 // Marketplace colors
@@ -25,6 +30,9 @@ const mpColors = {
     'IT': { line: '#00e676', fill: 'rgba(0, 230, 118, 0.2)' },
     'ES': { line: '#ffeb3b', fill: 'rgba(255, 235, 59, 0.2)' }
 };
+
+// Manual forecast color (purple/magenta)
+const manualForecastColor = { line: '#e040fb', fill: 'rgba(224, 64, 251, 0.15)' };
 
 // Initialize on DOM load
 document.addEventListener('DOMContentLoaded', () => {
@@ -54,6 +62,7 @@ function initializeEventListeners() {
     document.getElementById('metricSelect')?.addEventListener('change', handleMetricChange);
     document.getElementById('modelSelect')?.addEventListener('change', handleModelChange);
     document.getElementById('seasonalityToggle')?.addEventListener('change', handleSeasonalityChange);
+    document.getElementById('manualForecastToggle')?.addEventListener('change', handleManualForecastToggle);
     document.getElementById('refreshBtn')?.addEventListener('click', refreshDashboard);
     
     // Marketplace checkboxes
@@ -155,6 +164,11 @@ function handleStatsToggle(e) {
     }
 }
 
+function handleManualForecastToggle(e) {
+    state.showManualForecast = e.target.checked;
+    updateCharts();
+}
+
 async function checkExistingData() {
     try {
         const response = await fetch('/api/status');
@@ -228,6 +242,11 @@ async function loadData() {
         
         if (result.success) {
             state.data = result.data;
+            state.hasManualForecast = result.has_manual_forecast || false;
+            
+            if (result.manual_forecast) {
+                state.manualForecast = result.manual_forecast;
+            }
         }
         
         // Load statistics
@@ -237,8 +256,29 @@ async function loadData() {
         if (statsResult.success) {
             state.statistics = statsResult.statistics;
         }
+        
+        // Load accuracy metrics if manual forecast exists
+        if (state.hasManualForecast) {
+            const accResponse = await fetch('/api/accuracy');
+            const accResult = await accResponse.json();
+            
+            if (accResult.success && accResult.accuracy) {
+                state.accuracy = accResult.accuracy;
+            }
+        }
+        
+        // Update UI to show/hide manual forecast toggle
+        updateManualForecastToggleVisibility();
+        
     } catch (error) {
         console.error('Error loading data:', error);
+    }
+}
+
+function updateManualForecastToggleVisibility() {
+    const toggleGroup = document.getElementById('manualForecastToggleGroup');
+    if (toggleGroup) {
+        toggleGroup.style.display = state.hasManualForecast ? 'flex' : 'none';
     }
 }
 
@@ -271,6 +311,63 @@ function showDashboard() {
     
     updateStatistics();
     updateCharts();
+    updateAccuracyPanel();
+}
+
+function updateAccuracyPanel() {
+    const accuracyPanel = document.getElementById('accuracyPanel');
+    if (!accuracyPanel) return;
+    
+    if (!state.hasManualForecast || !state.accuracy) {
+        accuracyPanel.style.display = 'none';
+        return;
+    }
+    
+    accuracyPanel.style.display = 'block';
+    
+    const metric = state.currentMetric;
+    const accuracy = state.accuracy[metric];
+    
+    if (!accuracy) {
+        accuracyPanel.innerHTML = '<p style="color: var(--text-muted);">No accuracy data for this metric</p>';
+        return;
+    }
+    
+    let html = '<div class="accuracy-grid">';
+    
+    state.selectedMarketplaces.forEach(mp => {
+        if (!accuracy[mp]) return;
+        
+        const acc = accuracy[mp];
+        const accuracyClass = acc.accuracy >= 80 ? 'good' : acc.accuracy >= 60 ? 'medium' : 'poor';
+        const biasClass = acc.bias > 0 ? 'over' : 'under';
+        
+        html += `
+            <div class="accuracy-card">
+                <div class="accuracy-header">
+                    <span class="mp-flag ${mp.toLowerCase()}">${mp}</span>
+                    <span class="accuracy-value ${accuracyClass}">${acc.accuracy}%</span>
+                </div>
+                <div class="accuracy-details">
+                    <div class="accuracy-item">
+                        <span class="label">WMAPE</span>
+                        <span class="value">${acc.wmape}%</span>
+                    </div>
+                    <div class="accuracy-item">
+                        <span class="label">Bias</span>
+                        <span class="value ${biasClass}">${acc.bias > 0 ? '+' : ''}${acc.bias}%</span>
+                    </div>
+                    <div class="accuracy-item">
+                        <span class="label">Overlap</span>
+                        <span class="value">${acc.overlap_weeks} wks</span>
+                    </div>
+                </div>
+            </div>
+        `;
+    });
+    
+    html += '</div>';
+    accuracyPanel.innerHTML = html;
 }
 
 function updateStatistics() {
@@ -339,6 +436,9 @@ function updateStatistics() {
     
     statsGrid.innerHTML = html;
     document.getElementById('currentMetricLabel').textContent = metric;
+    
+    // Update accuracy panel when metric changes
+    updateAccuracyPanel();
 }
 
 function updateCharts() {
@@ -410,6 +510,7 @@ function renderChart(marketplace, metric, isModal = false) {
     
     const historicalData = state.data?.[metric]?.[marketplace];
     const forecast = state.forecasts?.[metric]?.[marketplace];
+    const manualForecast = state.manualForecast?.[metric]?.[marketplace];
     
     if (!historicalData) {
         container.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 2rem;">No data available</p>';
@@ -435,32 +536,50 @@ function renderChart(marketplace, metric, isModal = false) {
         marker: { size: isModal ? 6 : 4 }
     });
     
-    // Forecast trace
+    // Manual forecast trace (dotted line) - show if toggle is on
+    if (manualForecast && state.showManualForecast) {
+        const manualWeeks = manualForecast.weeks || manualForecast.dates.map(d => formatDateToWeek(d));
+        
+        traces.push({
+            x: manualWeeks,
+            y: manualForecast.values,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Manual FC',
+            line: { color: manualForecastColor.line, width: 2, dash: 'dot' },
+            marker: { size: isModal ? 6 : 4, symbol: 'square' }
+        });
+    }
+    
+    // Model forecast trace (dashed line)
     if (forecast) {
         const forecastWeeks = forecast.dates.map(d => formatDateToWeek(d));
         
-        // Forecast line
+        // Confidence interval (85%) - add FIRST so it renders behind the line
+        if (forecast.upper_bound && forecast.lower_bound && 
+            forecast.upper_bound.length > 0 && forecast.lower_bound.length > 0) {
+            traces.push({
+                x: [...forecastWeeks, ...forecastWeeks.slice().reverse()],
+                y: [...forecast.upper_bound, ...forecast.lower_bound.slice().reverse()],
+                type: 'scatter',
+                fill: 'toself',
+                fillcolor: colors.fill,
+                line: { color: 'transparent', width: 0 },
+                name: '85% CI',
+                showlegend: true,
+                hoverinfo: 'skip'
+            });
+        }
+        
+        // Forecast line - add AFTER CI so it renders on top
         traces.push({
             x: forecastWeeks,
             y: forecast.values,
             type: 'scatter',
             mode: 'lines+markers',
-            name: 'Forecast',
+            name: 'Model FC',
             line: { color: colors.line, width: 2, dash: 'dash' },
             marker: { size: isModal ? 6 : 4, symbol: 'diamond' }
-        });
-        
-        // Confidence interval (85%)
-        traces.push({
-            x: [...forecastWeeks, ...forecastWeeks.slice().reverse()],
-            y: [...forecast.upper_bound, ...forecast.lower_bound.slice().reverse()],
-            type: 'scatter',
-            fill: 'toself',
-            fillcolor: colors.fill,
-            line: { color: 'transparent' },
-            name: '85% CI',
-            showlegend: true,
-            hoverinfo: 'skip'
         });
         
         // Update forecast stats
@@ -468,25 +587,44 @@ function renderChart(marketplace, metric, isModal = false) {
             const modelDisplay = forecast.model || 'SARIMAX';
             const isDerived = modelDisplay.includes('Calculated') || (forecast.model_info && forecast.model_info.method === 'derived');
             
+            // Calculate accuracy info if available
+            const accuracy = state.accuracy?.[metric]?.[marketplace];
+            let accuracyHtml = '';
+            if (accuracy && state.hasManualForecast) {
+                const accClass = accuracy.accuracy >= 80 ? 'good' : accuracy.accuracy >= 60 ? 'medium' : 'poor';
+                accuracyHtml = `
+                    <div class="forecast-stat">
+                        <div class="value accuracy-badge ${accClass}">${accuracy.accuracy}%</div>
+                        <div class="label">Manual FC Acc</div>
+                    </div>
+                `;
+            }
+            
             statsContainer.innerHTML = `
                 <div class="forecast-stat">
                     <div class="value">${formatNumber(forecast.values.reduce((a, b) => a + b, 0))}</div>
-                    <div class="label">Forecast Total</div>
+                    <div class="label">Model FC Total</div>
                 </div>
                 <div class="forecast-stat">
                     <div class="value">${formatNumber(forecast.values.reduce((a, b) => a + b, 0) / forecast.values.length)}</div>
-                    <div class="label">Forecast Avg</div>
+                    <div class="label">Model FC Avg</div>
                 </div>
                 <div class="forecast-stat">
                     <div class="value" title="${isDerived ? 'Net Ordered Units = Transits × Conversion × UPO' : ''}">${modelDisplay}</div>
                     <div class="label">${isDerived ? 'Derived' : 'Model'}</div>
                 </div>
+                ${accuracyHtml}
             `;
         }
     }
     
     // Calculate dynamic left margin based on max value
-    const allValues = [...historicalData.values, ...(forecast?.values || []), ...(forecast?.upper_bound || [])];
+    const allValues = [
+        ...historicalData.values, 
+        ...(forecast?.values || []), 
+        ...(forecast?.upper_bound || []),
+        ...(manualForecast?.values || [])
+    ];
     const maxVal = Math.max(...allValues);
     let leftMargin = 60; // Default
     if (maxVal >= 10000000) leftMargin = 80;

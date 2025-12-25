@@ -820,6 +820,109 @@ input:checked + .toggle-slider::before {
     padding: 0.25rem;
 }
 
+/* Accuracy Panel */
+.accuracy-section {
+    margin-top: 2rem;
+}
+
+.accuracy-panel {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+}
+
+.accuracy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.accuracy-card {
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius-sm);
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.accuracy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.accuracy-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.accuracy-value.good {
+    background: rgba(0, 230, 118, 0.2);
+    color: #00e676;
+}
+
+.accuracy-value.medium {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.accuracy-value.poor {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+}
+
+.accuracy-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.accuracy-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.accuracy-item .label {
+    color: var(--text-muted);
+}
+
+.accuracy-item .value {
+    font-weight: 500;
+}
+
+.accuracy-item .value.over {
+    color: #ffc107;
+}
+
+.accuracy-item .value.under {
+    color: #00bcd4;
+}
+
+/* Accuracy badge in chart stats */
+.accuracy-badge {
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.accuracy-badge.good {
+    background: rgba(0, 230, 118, 0.2);
+    color: #00e676;
+}
+
+.accuracy-badge.medium {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.accuracy-badge.poor {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+}
+
 /* Footer */
 .footer {
     text-align: center;
