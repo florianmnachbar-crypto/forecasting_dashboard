@@ -14,7 +14,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "1.1.0"
+APP_VERSION = "1.2.0"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -186,7 +186,11 @@ def generate_forecast():
 
 @app.route('/api/forecast/all', methods=['POST'])
 def generate_all_forecasts():
-    """Generate forecasts for all metrics and marketplaces"""
+    """Generate forecasts for all metrics and marketplaces
+    
+    Net Ordered Units is calculated as: Transits × Transit Conversion × UPO
+    The other metrics (Transits, Transit Conversion, UPO) are forecasted independently
+    """
     global data_processor
     
     if data_processor is None:
@@ -200,7 +204,11 @@ def generate_all_forecasts():
         forecasts = {}
         forecaster = Forecaster(forecast_horizon=12)
         
-        for metric in DataProcessor.METRICS:
+        # Driver metrics that are forecasted independently
+        driver_metrics = ['Transits', 'Transit Conversion', 'UPO']
+        
+        # First, forecast the driver metrics
+        for metric in driver_metrics:
             forecasts[metric] = {}
             for mp in DataProcessor.MARKETPLACES:
                 df = data_processor.get_dataframe(metric, mp)
@@ -210,14 +218,74 @@ def generate_all_forecasts():
                     if forecast:
                         forecasts[metric][mp] = forecast
         
+        # Calculate Net Ordered Units from the multiplication of driver metrics
+        forecasts['Net Ordered Units'] = {}
+        
+        for mp in DataProcessor.MARKETPLACES:
+            # Check if we have all driver forecasts for this marketplace
+            has_transits = mp in forecasts.get('Transits', {})
+            has_conversion = mp in forecasts.get('Transit Conversion', {})
+            has_upo = mp in forecasts.get('UPO', {})
+            
+            if has_transits and has_conversion and has_upo:
+                transits_fc = forecasts['Transits'][mp]
+                conversion_fc = forecasts['Transit Conversion'][mp]
+                upo_fc = forecasts['UPO'][mp]
+                
+                # Calculate Net Ordered Units = Transits × Conversion × UPO
+                nou_values = []
+                nou_lower = []
+                nou_upper = []
+                
+                for i in range(len(transits_fc['values'])):
+                    # Point estimate: product of means
+                    t = transits_fc['values'][i]
+                    c = conversion_fc['values'][i]
+                    u = upo_fc['values'][i]
+                    nou = t * c * u
+                    nou_values.append(max(0, nou))
+                    
+                    # Confidence intervals using error propagation
+                    # Lower bound: use lower bounds of all drivers
+                    t_low = transits_fc['lower_bound'][i]
+                    c_low = conversion_fc['lower_bound'][i]
+                    u_low = upo_fc['lower_bound'][i]
+                    nou_lower.append(max(0, t_low * c_low * u_low))
+                    
+                    # Upper bound: use upper bounds of all drivers
+                    t_up = transits_fc['upper_bound'][i]
+                    c_up = conversion_fc['upper_bound'][i]
+                    u_up = upo_fc['upper_bound'][i]
+                    nou_upper.append(max(0, t_up * c_up * u_up))
+                
+                forecasts['Net Ordered Units'][mp] = {
+                    'dates': transits_fc['dates'],  # Use same dates
+                    'values': nou_values,
+                    'lower_bound': nou_lower,
+                    'upper_bound': nou_upper,
+                    'model': 'Calculated (T×C×U)',
+                    'model_info': {
+                        'method': 'derived',
+                        'formula': 'Transits × Transit Conversion × UPO',
+                        'source_models': {
+                            'Transits': transits_fc.get('model', 'SARIMAX'),
+                            'Transit Conversion': conversion_fc.get('model', 'SARIMAX'),
+                            'UPO': upo_fc.get('model', 'SARIMAX')
+                        }
+                    }
+                }
+        
         return jsonify({
             'success': True,
             'forecasts': forecasts,
             'model': model_type,
-            'seasonality': use_seasonality
+            'seasonality': use_seasonality,
+            'derived_metrics': ['Net Ordered Units']
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 

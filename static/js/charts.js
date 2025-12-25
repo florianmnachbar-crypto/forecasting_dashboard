@@ -395,6 +395,9 @@ function renderChart(marketplace, metric) {
         
         // Update forecast stats
         if (statsContainer) {
+            const modelDisplay = forecast.model || 'SARIMAX';
+            const isDerived = modelDisplay.includes('Calculated') || (forecast.model_info && forecast.model_info.method === 'derived');
+            
             statsContainer.innerHTML = `
                 <div class="forecast-stat">
                     <div class="value">${formatNumber(forecast.values.reduce((a, b) => a + b, 0))}</div>
@@ -405,8 +408,8 @@ function renderChart(marketplace, metric) {
                     <div class="label">Forecast Avg</div>
                 </div>
                 <div class="forecast-stat">
-                    <div class="value">${forecast.model || 'SARIMAX'}</div>
-                    <div class="label">Model</div>
+                    <div class="value" title="${isDerived ? 'Net Ordered Units = Transits × Conversion × UPO' : ''}">${modelDisplay}</div>
+                    <div class="label">${isDerived ? 'Derived' : 'Model'}</div>
                 </div>
             `;
         }
