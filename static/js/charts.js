@@ -556,19 +556,42 @@ function renderChart(marketplace, metric, isModal = false) {
         const forecastWeeks = forecast.dates.map(d => formatDateToWeek(d));
         
         // Confidence interval (85%) - add FIRST so it renders behind the line
+        // Filter out null/NaN values to prevent cutouts in the polygon
         if (forecast.upper_bound && forecast.lower_bound && 
             forecast.upper_bound.length > 0 && forecast.lower_bound.length > 0) {
-            traces.push({
-                x: [...forecastWeeks, ...forecastWeeks.slice().reverse()],
-                y: [...forecast.upper_bound, ...forecast.lower_bound.slice().reverse()],
-                type: 'scatter',
-                fill: 'toself',
-                fillcolor: colors.fill,
-                line: { color: 'transparent', width: 0 },
-                name: '85% CI',
-                showlegend: true,
-                hoverinfo: 'skip'
-            });
+            
+            // Build arrays of valid CI points (no nulls/NaN)
+            const validCIData = [];
+            for (let i = 0; i < forecastWeeks.length; i++) {
+                const upper = forecast.upper_bound[i];
+                const lower = forecast.lower_bound[i];
+                if (upper != null && lower != null && !isNaN(upper) && !isNaN(lower)) {
+                    validCIData.push({
+                        week: forecastWeeks[i],
+                        upper: upper,
+                        lower: lower
+                    });
+                }
+            }
+            
+            // Only render CI if we have valid points
+            if (validCIData.length > 0) {
+                const ciWeeks = validCIData.map(d => d.week);
+                const ciUpper = validCIData.map(d => d.upper);
+                const ciLower = validCIData.map(d => d.lower);
+                
+                traces.push({
+                    x: [...ciWeeks, ...ciWeeks.slice().reverse()],
+                    y: [...ciUpper, ...ciLower.slice().reverse()],
+                    type: 'scatter',
+                    fill: 'toself',
+                    fillcolor: colors.fill,
+                    line: { color: 'transparent', width: 0 },
+                    name: '85% CI',
+                    showlegend: true,
+                    hoverinfo: 'skip'
+                });
+            }
         }
         
         // Forecast line - add AFTER CI so it renders on top
@@ -675,13 +698,34 @@ function renderChart(marketplace, metric, isModal = false) {
 
 function formatDateToWeek(dateStr) {
     const date = new Date(dateStr);
-    // Adjust for Sunday start
-    const adjusted = new Date(date.getTime() + 24 * 60 * 60 * 1000);
-    const year = adjusted.getFullYear();
-    const startOfYear = new Date(year, 0, 1);
-    const days = Math.floor((adjusted - startOfYear) / (24 * 60 * 60 * 1000));
-    const weekNum = Math.ceil((days + startOfYear.getDay() + 1) / 7);
-    return `Wk${String(weekNum).padStart(2, '0')} ${year}`;
+    
+    // Use proper ISO 8601 week calculation
+    // ISO week: Week 1 is the week containing January 4th
+    // Weeks start on Monday
+    const target = new Date(date.valueOf());
+    
+    // Set to nearest Thursday (for ISO week calculation)
+    // Monday = 1, Sunday = 0 -> we need to adjust Sunday to be 7
+    const dayOfWeek = date.getDay();
+    const dayOffset = dayOfWeek === 0 ? -3 : (4 - dayOfWeek);
+    target.setDate(date.getDate() + dayOffset);
+    
+    // Get the year of the Thursday (which determines the ISO week year)
+    const isoYear = target.getFullYear();
+    
+    // Get January 4th of that year (always in week 1)
+    const jan4 = new Date(isoYear, 0, 4);
+    
+    // Find the Monday of week 1
+    const jan4Day = jan4.getDay();
+    const mondayOfWeek1 = new Date(jan4);
+    mondayOfWeek1.setDate(jan4.getDate() - (jan4Day === 0 ? 6 : jan4Day - 1));
+    
+    // Calculate week number
+    const diffMs = target - mondayOfWeek1;
+    const weekNum = Math.floor(diffMs / (7 * 24 * 60 * 60 * 1000)) + 1;
+    
+    return `Wk${String(weekNum).padStart(2, '0')} ${isoYear}`;
 }
 
 function handleMetricChange(e) {
