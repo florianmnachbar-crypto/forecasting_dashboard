@@ -1,5 +1,5 @@
 /**
- * Amazon Haul EU5 Forecasting Dashboard - Charts v1.1.0
+ * Amazon Haul EU5 Forecasting Dashboard - Charts v1.3.0
  * Handles data visualization, theme switching, and user interactions
  */
 
@@ -30,6 +30,7 @@ const mpColors = {
 document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     initializeTheme();
+    initializeModal();
     checkExistingData();
 });
 
@@ -74,6 +75,43 @@ function initializeTheme() {
     const savedTheme = localStorage.getItem('dashboardTheme') || 'dark';
     state.theme = savedTheme;
     applyTheme(savedTheme);
+}
+
+function initializeModal() {
+    // Create modal HTML if it doesn't exist
+    if (!document.getElementById('chartModal')) {
+        const modalHTML = `
+            <div id="chartModal" class="chart-modal">
+                <div class="chart-modal-content">
+                    <div class="chart-modal-header">
+                        <h3 id="modalTitle">Chart</h3>
+                        <button class="modal-close-btn" onclick="closeChartModal()">
+                            <i class="fas fa-times"></i>
+                        </button>
+                    </div>
+                    <div class="chart-modal-body">
+                        <div id="modalChartContainer" class="modal-chart-container"></div>
+                        <div id="modalForecastStats" class="forecast-stats modal-forecast-stats"></div>
+                    </div>
+                </div>
+            </div>
+        `;
+        document.body.insertAdjacentHTML('beforeend', modalHTML);
+        
+        // Close modal on backdrop click
+        document.getElementById('chartModal').addEventListener('click', (e) => {
+            if (e.target.id === 'chartModal') {
+                closeChartModal();
+            }
+        });
+        
+        // Close modal on Escape key
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') {
+                closeChartModal();
+            }
+        });
+    }
 }
 
 function toggleTheme() {
@@ -311,12 +349,13 @@ function updateCharts() {
     
     state.selectedMarketplaces.forEach(mp => {
         html += `
-            <div class="chart-card">
+            <div class="chart-card clickable" onclick="openChartModal('${mp}')" title="Click to expand">
                 <div class="chart-card-header">
                     <h4>
                         <span class="chart-icon mp-flag ${mp.toLowerCase()}">${mp}</span>
                         ${mp === 'EU5' ? 'EU5 Consolidated' : getMarketplaceName(mp)}
                     </h4>
+                    <span class="expand-icon"><i class="fas fa-expand-alt"></i></span>
                 </div>
                 <div class="chart-container" id="chart-${mp}"></div>
                 <div class="forecast-stats" id="forecast-stats-${mp}"></div>
@@ -328,13 +367,44 @@ function updateCharts() {
     
     // Render each chart
     state.selectedMarketplaces.forEach(mp => {
-        renderChart(mp, metric);
+        renderChart(mp, metric, false);
     });
 }
 
-function renderChart(marketplace, metric) {
-    const container = document.getElementById(`chart-${marketplace}`);
-    const statsContainer = document.getElementById(`forecast-stats-${marketplace}`);
+function openChartModal(marketplace) {
+    const modal = document.getElementById('chartModal');
+    const modalTitle = document.getElementById('modalTitle');
+    const metric = state.currentMetric;
+    
+    // Set modal title
+    const mpName = marketplace === 'EU5' ? 'EU5 Consolidated' : getMarketplaceName(marketplace);
+    modalTitle.innerHTML = `<span class="mp-flag ${marketplace.toLowerCase()}">${marketplace}</span> ${mpName} - ${metric}`;
+    
+    // Show modal
+    modal.classList.add('active');
+    document.body.style.overflow = 'hidden'; // Prevent background scroll
+    
+    // Render expanded chart after modal is visible (slight delay for animation)
+    setTimeout(() => {
+        renderChart(marketplace, metric, true);
+    }, 50);
+}
+
+function closeChartModal() {
+    const modal = document.getElementById('chartModal');
+    modal.classList.remove('active');
+    document.body.style.overflow = ''; // Restore scrolling
+    
+    // Clean up the chart
+    Plotly.purge('modalChartContainer');
+}
+
+function renderChart(marketplace, metric, isModal = false) {
+    const containerId = isModal ? 'modalChartContainer' : `chart-${marketplace}`;
+    const statsContainerId = isModal ? 'modalForecastStats' : `forecast-stats-${marketplace}`;
+    
+    const container = document.getElementById(containerId);
+    const statsContainer = document.getElementById(statsContainerId);
     
     if (!container) return;
     
@@ -362,7 +432,7 @@ function renderChart(marketplace, metric) {
         mode: 'lines+markers',
         name: 'Historical',
         line: { color: colors.line, width: 2 },
-        marker: { size: 4 }
+        marker: { size: isModal ? 6 : 4 }
     });
     
     // Forecast trace
@@ -377,7 +447,7 @@ function renderChart(marketplace, metric) {
             mode: 'lines+markers',
             name: 'Forecast',
             line: { color: colors.line, width: 2, dash: 'dash' },
-            marker: { size: 4, symbol: 'diamond' }
+            marker: { size: isModal ? 6 : 4, symbol: 'diamond' }
         });
         
         // Confidence interval (85%)
@@ -415,35 +485,51 @@ function renderChart(marketplace, metric) {
         }
     }
     
+    // Calculate dynamic left margin based on max value
+    const allValues = [...historicalData.values, ...(forecast?.values || []), ...(forecast?.upper_bound || [])];
+    const maxVal = Math.max(...allValues);
+    let leftMargin = 60; // Default
+    if (maxVal >= 10000000) leftMargin = 80;
+    else if (maxVal >= 1000000) leftMargin = 75;
+    else if (maxVal >= 100000) leftMargin = 70;
+    
     const layout = {
         paper_bgcolor: 'transparent',
         plot_bgcolor: 'transparent',
         font: { 
             color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.8)',
-            family: 'Inter, sans-serif'
+            family: 'Inter, sans-serif',
+            size: isModal ? 12 : 10
         },
-        margin: { l: 50, r: 30, t: 30, b: 60 },
+        margin: isModal 
+            ? { l: leftMargin + 20, r: 40, t: 40, b: 80 }
+            : { l: leftMargin, r: 30, t: 30, b: 60 },
         xaxis: {
             gridcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
             tickangle: -45,
-            tickfont: { size: 10 }
+            tickfont: { size: isModal ? 11 : 9 }
         },
         yaxis: {
             gridcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
-            tickformat: metric === 'Transit Conversion' ? '.2%' : ',d'
+            tickformat: metric === 'Transit Conversion' ? '.2%' : '.2s',
+            tickfont: { size: isModal ? 11 : 9 },
+            automargin: true
         },
         legend: {
             orientation: 'h',
-            y: -0.2,
+            y: isModal ? -0.15 : -0.25,
             x: 0.5,
-            xanchor: 'center'
+            xanchor: 'center',
+            font: { size: isModal ? 12 : 10 }
         },
         hovermode: 'x unified'
     };
     
     const config = {
         responsive: true,
-        displayModeBar: false
+        displayModeBar: isModal,
+        modeBarButtonsToRemove: ['pan2d', 'select2d', 'lasso2d', 'autoScale2d'],
+        displaylogo: false
     };
     
     Plotly.newPlot(container, traces, layout, config);
