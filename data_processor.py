@@ -135,6 +135,10 @@ class DataProcessor:
             
             if self.manual_forecast:
                 self.has_manual_forecast = True
+                
+                # Recalculate Net Ordered Units from components to fix [object Object] issues
+                self._recalculate_net_ordered_units(is_forecast=True)
+                
                 # Recalculate EU5 for manual forecast
                 self.calculate_eu5_totals(is_forecast=True)
                 print("Manual forecast loaded successfully")
@@ -512,6 +516,80 @@ class DataProcessor:
                 result['data'][mp][metric] = metric_data
         
         return result
+    
+    def _recalculate_net_ordered_units(self, is_forecast=False):
+        """Recalculate Net Ordered Units from component metrics (Transits × CVR × UPO)
+        
+        This fixes issues where Excel formulas produce [object Object] instead of values
+        """
+        data_source = self.manual_forecast if is_forecast else self.data
+        source_name = "forecast" if is_forecast else "actuals"
+        
+        # Check if we have all required component metrics
+        required_metrics = ['Transits', 'Transit Conversion', 'UPO']
+        for metric in required_metrics:
+            if metric not in data_source:
+                print(f"  Cannot recalculate Net Ordered Units: missing {metric}")
+                return
+        
+        # Initialize Net Ordered Units if not present
+        if 'Net Ordered Units' not in data_source:
+            data_source['Net Ordered Units'] = {}
+        
+        # Get the list of marketplaces from component metrics
+        all_mps = set()
+        for metric in required_metrics:
+            all_mps.update(data_source[metric].keys())
+        
+        individual_mps = ['UK', 'DE', 'FR', 'IT', 'ES']
+        
+        for mp in individual_mps:
+            if mp not in all_mps:
+                continue
+            
+            # Check if all components exist for this marketplace
+            has_all = all(mp in data_source[m] for m in required_metrics)
+            if not has_all:
+                continue
+            
+            transits = data_source['Transits'][mp]
+            cvr = data_source['Transit Conversion'][mp]
+            upo = data_source['UPO'][mp]
+            
+            # Determine the length
+            max_len = max(len(transits), len(cvr), len(upo))
+            
+            # Calculate Net Ordered Units for each week
+            calculated_values = []
+            recalculated_count = 0
+            
+            for i in range(max_len):
+                # Get component values (with bounds checking)
+                t = transits[i] if i < len(transits) else np.nan
+                c = cvr[i] if i < len(cvr) else np.nan
+                u = upo[i] if i < len(upo) else np.nan
+                
+                # Get existing NOU value if available
+                existing_nou = np.nan
+                if mp in data_source.get('Net Ordered Units', {}) and i < len(data_source['Net Ordered Units'].get(mp, [])):
+                    existing_nou = data_source['Net Ordered Units'][mp][i]
+                
+                # If existing value is valid, keep it; otherwise calculate
+                if not np.isnan(existing_nou):
+                    calculated_values.append(existing_nou)
+                elif not np.isnan(t) and not np.isnan(c) and not np.isnan(u):
+                    # Calculate: Net Ordered Units = Transits × CVR × UPO
+                    nou = t * c * u
+                    calculated_values.append(nou)
+                    recalculated_count += 1
+                else:
+                    calculated_values.append(np.nan)
+            
+            # Store the calculated values
+            data_source['Net Ordered Units'][mp] = calculated_values
+            
+            valid_count = sum(1 for v in calculated_values if not np.isnan(v))
+            print(f"  {mp} Net Ordered Units [{source_name}]: {valid_count} valid ({recalculated_count} recalculated from components)")
     
     def calculate_eu5_totals(self, is_forecast=False):
         """Recalculate EU5 totals from individual marketplace data"""
