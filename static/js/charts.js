@@ -447,9 +447,10 @@ function handlePromoOverlayToggle(e) {
     updateCharts();
 }
 
-function handlePromoUpliftToggle(e) {
+async function handlePromoUpliftToggle(e) {
     state.showPromoUplift = e.target.checked;
-    updateCharts();
+    // Regenerate SARIMAX forecasts with/without promo regressor
+    await refreshForecasts();
 }
 
 async function checkExistingData() {
@@ -653,7 +654,8 @@ async function generateForecasts() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 model: state.model,
-                seasonality: state.seasonality
+                seasonality: state.seasonality,
+                include_promo: state.showPromoUplift  // Include promo as SARIMAX regressor if toggle is on
             })
         });
         
@@ -953,26 +955,16 @@ function renderChart(marketplace, metric, isModal = false) {
         marker: { size: isModal ? 6 : 4 }
     });
     
-    // Manual forecast trace (dotted line) - show if toggle is on
+    // Manual forecast trace (dotted line) - show if toggle is on (no uplift applied - manual FC shown as-is)
     if (manualForecast && state.showManualForecast) {
         const manualWeeks = manualForecast.weeks || manualForecast.dates.map(d => formatDateToWeek(d));
         
-        // Check if we should apply promo uplift
-        const upliftData = state.forecastUplift?.[metric]?.[marketplace];
-        let forecastValues = manualForecast.values;
-        let forecastLabel = 'Manual FC';
-        
-        if (state.showPromoUplift && upliftData) {
-            forecastValues = upliftData.uplifted_values;
-            forecastLabel = 'Manual FC (Uplift)';
-        }
-        
         traces.push({
             x: manualWeeks,
-            y: forecastValues,
+            y: manualForecast.values,
             type: 'scatter',
             mode: 'lines+markers',
-            name: forecastLabel,
+            name: 'Manual FC',
             line: { color: manualForecastColor.line, width: 2, dash: 'dot' },
             marker: { size: isModal ? 6 : 4, symbol: 'square' }
         });
@@ -1034,7 +1026,11 @@ function renderChart(marketplace, metric, isModal = false) {
         
         // Update forecast stats based on statsView
         if (statsContainer) {
-            const modelDisplay = forecast.model || 'SARIMAX';
+            let modelDisplay = forecast.model || 'SARIMAX';
+            // Add promo indicator if promo regressor was used
+            if (state.showPromoUplift && state.hasPromoScores && forecast.promo_info) {
+                modelDisplay += ' +Promo';
+            }
             const isDerived = modelDisplay.includes('Calculated') || (forecast.model_info && forecast.model_info.method === 'derived');
             
             // Calculate accuracy info if available
