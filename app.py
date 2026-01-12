@@ -395,8 +395,9 @@ def _apply_promo_floor(promo_forecast, baseline_forecast, future_scores):
     """Apply floor logic: promo score > 1 cannot decrease forecast below baseline
     
     For each future week:
-    - If promo_score > 1.0: use max(baseline, promo_adjusted)
-    - Otherwise: use promo_adjusted as-is
+    - If promo_score > 1.0: use max(baseline, promo_adjusted) - promo can only help
+    - If promo_score = 1.0 (no promo): use baseline forecast
+    - If promo_score < 1.0: use promo_adjusted (allowed to be lower for weak promo weeks)
     
     This ensures that marking a week as "promo" can only improve the forecast, never decrease it.
     """
@@ -404,22 +405,28 @@ def _apply_promo_floor(promo_forecast, baseline_forecast, future_scores):
     floored_lower = []
     floored_upper = []
     floor_applied_count = 0
+    baseline_used_count = 0
     
     for i in range(len(promo_forecast['values'])):
         promo_val = promo_forecast['values'][i]
         baseline_val = baseline_forecast['values'][i]
         promo_score = future_scores[i] if i < len(future_scores) else 1.0
         
-        # If promo score > 1, apply floor (promo cannot decrease forecast)
+        # Apply logic based on promo score
         if promo_score > 1.0:
+            # Promo week - promo cannot decrease forecast below baseline
             if promo_val < baseline_val:
                 # Promo model decreased the forecast - use baseline instead
                 floored_values.append(baseline_val)
                 floor_applied_count += 1
             else:
                 floored_values.append(promo_val)
+        elif promo_score == 1.0:
+            # No promo week - use baseline forecast
+            floored_values.append(baseline_val)
+            baseline_used_count += 1
         else:
-            # Non-promo week - use promo forecast as-is
+            # Low promo (score < 1) - use promo forecast (allowed to be lower)
             floored_values.append(promo_val)
         
         # Apply same logic to confidence intervals
@@ -431,6 +438,9 @@ def _apply_promo_floor(promo_forecast, baseline_forecast, future_scores):
         if promo_score > 1.0:
             floored_lower.append(max(promo_lower, baseline_lower))
             floored_upper.append(max(promo_upper, baseline_upper))
+        elif promo_score == 1.0:
+            floored_lower.append(baseline_lower)
+            floored_upper.append(baseline_upper)
         else:
             floored_lower.append(promo_lower)
             floored_upper.append(promo_upper)
@@ -446,10 +456,11 @@ def _apply_promo_floor(promo_forecast, baseline_forecast, future_scores):
         result['model_info'] = {}
     result['model_info']['promo_floor_applied'] = True
     result['model_info']['floor_applied_weeks'] = floor_applied_count
+    result['model_info']['baseline_used_weeks'] = baseline_used_count
     
     # Update model name to indicate flooring
-    if floor_applied_count > 0:
-        result['model'] = result.get('model', 'SARIMAX') + ' (Floored)'
+    if floor_applied_count > 0 or baseline_used_count > 0:
+        result['model'] = result.get('model', 'SARIMAX') + ' +Promo'
     
     return result
 
