@@ -1023,25 +1023,36 @@ class DataProcessor:
         return result
     
     def get_forecast_with_promo_uplift(self, metric, marketplace):
-        """Apply promo uplift factors to forecast values
+        """Apply promo uplift factors to forecast values for FUTURE weeks only
         
-        Returns forecast data with uplift applied based on promo scores for future weeks
+        Uplift is calculated as: baseline_avg × uplift_factor
+        (NOT manual_forecast × uplift_factor)
+        
+        Returns forecast data with uplift applied ONLY for weeks after the last actuals date
+        Historic weeks (where actuals exist) keep their original manual forecast values
         """
         if not self.has_manual_forecast or not self.has_promo_scores:
             return None
         
         # Get forecast data
-        df = self.get_dataframe(metric, marketplace, is_forecast=True)
-        if df is None or df.empty:
+        forecast_df = self.get_dataframe(metric, marketplace, is_forecast=True)
+        if forecast_df is None or forecast_df.empty:
             return None
         
-        # Get promo analysis for uplift factors
+        # Get actuals data to find the last actuals date
+        actuals_df = self.get_dataframe(metric, marketplace, is_forecast=False)
+        last_actuals_date = None
+        if actuals_df is not None and not actuals_df.empty:
+            last_actuals_date = actuals_df['ds'].max()
+        
+        # Get promo analysis for uplift factors and baseline
         analysis = self.calculate_promo_uplift_analysis(metric)
         if not analysis or marketplace not in analysis:
             return None
         
         mp_analysis = analysis[marketplace]
         bands = mp_analysis.get('bands', {})
+        baseline_avg = mp_analysis.get('baseline_avg')
         
         # Build uplift factor map from bands
         uplift_map = {}
@@ -1049,54 +1060,79 @@ class DataProcessor:
             if 'uplift_factor' in stats:
                 uplift_map[band_label] = stats['uplift_factor']
         
-        # If no uplift factors available, return original data
-        if not uplift_map:
+        # If no uplift factors or baseline available, return None
+        if not uplift_map or baseline_avg is None:
             return None
         
         # Apply uplift to each forecast value
         uplifted_values = []
         uplift_details = []
         
-        for _, row in df.iterrows():
-            week_label = self.format_week_label(row['ds'])
+        for _, row in forecast_df.iterrows():
+            week_date = row['ds']
+            week_label = self.format_week_label(week_date)
             original_value = row['y']
             
-            # Get promo score for this week
-            score = self.get_promo_score_for_week(marketplace, week_label)
+            # Only apply uplift to FUTURE weeks (after last actuals date)
+            is_future_week = last_actuals_date is None or week_date > last_actuals_date
             
-            if score is not None:
-                band = self.get_promo_band(score)
-                uplift_factor = uplift_map.get(band, 1.0)
-                uplifted_value = original_value * uplift_factor
+            if is_future_week:
+                # Get promo score for this week
+                score = self.get_promo_score_for_week(marketplace, week_label)
                 
-                uplifted_values.append(uplifted_value)
-                uplift_details.append({
-                    'week': week_label,
-                    'original': original_value,
-                    'uplifted': round(uplifted_value, 2),
-                    'score': score,
-                    'band': band,
-                    'uplift_factor': uplift_factor
-                })
+                if score is not None:
+                    band = self.get_promo_band(score)
+                    uplift_factor = uplift_map.get(band, 1.0)
+                    # Use baseline × uplift_factor (NOT manual_forecast × uplift_factor)
+                    uplifted_value = baseline_avg * uplift_factor
+                    
+                    uplifted_values.append(uplifted_value)
+                    uplift_details.append({
+                        'week': week_label,
+                        'original': original_value,
+                        'uplifted': round(uplifted_value, 2),
+                        'score': score,
+                        'band': band,
+                        'uplift_factor': uplift_factor,
+                        'baseline_used': baseline_avg,
+                        'is_future': True
+                    })
+                else:
+                    # No promo score for future week - use baseline (No/Low Promo assumption)
+                    uplifted_values.append(baseline_avg)
+                    uplift_details.append({
+                        'week': week_label,
+                        'original': original_value,
+                        'uplifted': baseline_avg,
+                        'score': None,
+                        'band': 'No Data (baseline)',
+                        'uplift_factor': 1.0,
+                        'baseline_used': baseline_avg,
+                        'is_future': True
+                    })
             else:
-                # No promo score, keep original value
+                # Historic week - keep original manual forecast value (no uplift)
                 uplifted_values.append(original_value)
                 uplift_details.append({
                     'week': week_label,
                     'original': original_value,
                     'uplifted': original_value,
                     'score': None,
-                    'band': 'No Data',
-                    'uplift_factor': 1.0
+                    'band': 'Historic (no uplift)',
+                    'uplift_factor': 1.0,
+                    'baseline_used': None,
+                    'is_future': False
                 })
         
         return {
-            'dates': df['ds'].dt.strftime('%Y-%m-%d').tolist(),
-            'weeks': [self.format_week_label(d) for d in df['ds']],
-            'original_values': df['y'].tolist(),
+            'dates': forecast_df['ds'].dt.strftime('%Y-%m-%d').tolist(),
+            'weeks': [self.format_week_label(d) for d in forecast_df['ds']],
+            'original_values': forecast_df['y'].tolist(),
             'uplifted_values': uplifted_values,
             'details': uplift_details,
-            'uplift_factors': uplift_map
+            'uplift_factors': uplift_map,
+            'baseline_avg': baseline_avg,
+            'last_actuals_date': last_actuals_date.strftime('%Y-%m-%d') if last_actuals_date else None
         }
     
     def get_all_forecast_with_uplift(self):
