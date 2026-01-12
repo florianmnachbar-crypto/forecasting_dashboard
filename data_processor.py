@@ -436,6 +436,83 @@ class DataProcessor:
         
         return stats
     
+    def get_latest_week_overview(self):
+        """Get the latest week's data comparing actuals vs forecasts for all marketplaces and metrics
+        
+        Returns a dictionary with:
+        - latest_week: The week label
+        - latest_date: The date
+        - data: Dictionary keyed by marketplace, containing all 4 metrics with:
+          - actual: Actual value
+          - manual_forecast: Manual forecast value (if available)
+          - manual_dev: Deviation from manual forecast (%)
+        """
+        if not self.data:
+            return None
+        
+        # Find the latest week across all metrics
+        latest_date = None
+        latest_week = None
+        
+        for metric in self.METRICS:
+            if metric not in self.data:
+                continue
+            for mp in self.MARKETPLACES:
+                df = self.get_dataframe(metric, mp, is_forecast=False)
+                if df is not None and not df.empty:
+                    last_date = df['ds'].max()
+                    if latest_date is None or last_date > latest_date:
+                        latest_date = last_date
+                        latest_week = df[df['ds'] == last_date]['week'].iloc[0]
+        
+        if latest_date is None:
+            return None
+        
+        # Build the overview data
+        result = {
+            'latest_week': latest_week,
+            'latest_date': latest_date.strftime('%Y-%m-%d'),
+            'data': {}
+        }
+        
+        for mp in self.MARKETPLACES:
+            result['data'][mp] = {}
+            
+            for metric in self.METRICS:
+                metric_data = {
+                    'actual': None,
+                    'manual_forecast': None,
+                    'manual_dev': None,
+                    'manual_dev_pct': None
+                }
+                
+                # Get actual value for the latest week
+                df_actual = self.get_dataframe(metric, mp, is_forecast=False)
+                if df_actual is not None and not df_actual.empty:
+                    latest_actual = df_actual[df_actual['ds'] == latest_date]
+                    if not latest_actual.empty:
+                        metric_data['actual'] = float(latest_actual['y'].iloc[0])
+                
+                # Get manual forecast value for the latest week
+                if self.has_manual_forecast:
+                    df_forecast = self.get_dataframe(metric, mp, is_forecast=True)
+                    if df_forecast is not None and not df_forecast.empty:
+                        latest_forecast = df_forecast[df_forecast['ds'] == latest_date]
+                        if not latest_forecast.empty:
+                            metric_data['manual_forecast'] = float(latest_forecast['y'].iloc[0])
+                
+                # Calculate deviation
+                if metric_data['actual'] is not None and metric_data['manual_forecast'] is not None:
+                    if metric_data['manual_forecast'] != 0:
+                        dev = metric_data['actual'] - metric_data['manual_forecast']
+                        dev_pct = (dev / metric_data['manual_forecast']) * 100
+                        metric_data['manual_dev'] = round(dev, 4)
+                        metric_data['manual_dev_pct'] = round(dev_pct, 1)
+                
+                result['data'][mp][metric] = metric_data
+        
+        return result
+    
     def calculate_eu5_totals(self, is_forecast=False):
         """Recalculate EU5 totals from individual marketplace data"""
         individual_mps = ['UK', 'DE', 'FR', 'IT', 'ES']

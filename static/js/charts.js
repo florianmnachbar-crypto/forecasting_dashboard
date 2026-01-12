@@ -39,6 +39,7 @@ document.addEventListener('DOMContentLoaded', () => {
     initializeEventListeners();
     initializeTheme();
     initializeModal();
+    initializeTabs();
     checkExistingData();
 });
 
@@ -77,6 +78,231 @@ function initializeEventListeners() {
     document.querySelectorAll('.stats-toggle-btn').forEach(btn => {
         btn.addEventListener('click', handleStatsToggle);
     });
+    
+    // Tab navigation
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.addEventListener('click', handleTabChange);
+    });
+    
+    // Historic deviations selects
+    document.getElementById('deviationMetricSelect')?.addEventListener('change', loadHistoricDeviations);
+    document.getElementById('deviationMpSelect')?.addEventListener('change', loadHistoricDeviations);
+    
+    // Export dropdown
+    initializeExportDropdown();
+}
+
+function initializeExportDropdown() {
+    const exportBtn = document.getElementById('exportBtn');
+    const exportDropdown = document.getElementById('exportDropdown');
+    const exportOptions = document.querySelectorAll('.export-option');
+    
+    // Toggle dropdown on button click
+    exportBtn?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        if (exportBtn.disabled) return;
+        exportDropdown.classList.toggle('open');
+    });
+    
+    // Handle export option clicks
+    exportOptions.forEach(option => {
+        option.addEventListener('click', (e) => {
+            const format = e.currentTarget.dataset.format;
+            handleExport(format);
+            exportDropdown.classList.remove('open');
+        });
+    });
+    
+    // Close dropdown when clicking outside
+    document.addEventListener('click', (e) => {
+        if (!exportDropdown?.contains(e.target)) {
+            exportDropdown?.classList.remove('open');
+        }
+    });
+}
+
+function updateExportButtonState() {
+    const exportBtn = document.getElementById('exportBtn');
+    if (exportBtn) {
+        exportBtn.disabled = !state.data;
+    }
+}
+
+async function handleExport(format) {
+    if (!state.data) {
+        showToast('error', 'No Data', 'Please upload data first before exporting');
+        return;
+    }
+    
+    showLoading();
+    
+    try {
+        const endpoint = format === 'csv' ? '/api/export/csv' : '/api/export/excel';
+        const response = await fetch(endpoint);
+        
+        if (!response.ok) {
+            const errorData = await response.json();
+            throw new Error(errorData.error || 'Export failed');
+        }
+        
+        // Get filename from Content-Disposition header or use default
+        const contentDisposition = response.headers.get('Content-Disposition');
+        let filename = `amazon_haul_eu5_export.${format === 'csv' ? 'csv' : 'xlsx'}`;
+        if (contentDisposition) {
+            const match = contentDisposition.match(/filename=(.+)/);
+            if (match) {
+                filename = match[1];
+            }
+        }
+        
+        // Download the file
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        document.body.removeChild(a);
+        
+        showToast('success', 'Export Complete', `Data exported as ${format.toUpperCase()}`);
+    } catch (error) {
+        console.error('Export error:', error);
+        showToast('error', 'Export Failed', error.message);
+    }
+    
+    hideLoading();
+}
+
+function initializeTabs() {
+    // Set default tab as active
+    const defaultTab = document.querySelector('.tab-btn[data-tab="forecasts"]');
+    if (defaultTab) {
+        defaultTab.classList.add('active');
+    }
+}
+
+function handleTabChange(e) {
+    const tabName = e.currentTarget.dataset.tab;
+    
+    // Update button states
+    document.querySelectorAll('.tab-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.tab === tabName);
+    });
+    
+    // Update tab content visibility
+    document.querySelectorAll('.tab-content').forEach(content => {
+        content.classList.toggle('active', content.id === `tab-${tabName}`);
+    });
+    
+    // Load latest week data if switching to that tab
+    if (tabName === 'latest-week') {
+        loadLatestWeekOverview();
+    }
+    
+    // Load historic deviations if switching to that tab
+    if (tabName === 'historic-deviations') {
+        loadHistoricDeviations();
+    }
+}
+
+async function loadLatestWeekOverview() {
+    try {
+        const response = await fetch('/api/latest-week');
+        const result = await response.json();
+        
+        if (result.success) {
+            renderLatestWeekTable(result.overview, result.has_manual_forecast);
+        } else {
+            console.error('Failed to load latest week overview:', result.error);
+        }
+    } catch (error) {
+        console.error('Error loading latest week overview:', error);
+    }
+}
+
+function renderLatestWeekTable(overview, hasManualForecast) {
+    const tableBody = document.getElementById('latestWeekTableBody');
+    const weekLabel = document.getElementById('latestWeekLabel');
+    
+    if (!tableBody) return;
+    
+    // Update the week label
+    if (weekLabel && overview.latest_week) {
+        weekLabel.textContent = overview.latest_week;
+    }
+    
+    const marketplaces = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
+    const metrics = ['Net Ordered Units', 'Transits', 'Transit Conversion', 'UPO'];
+    
+    let html = '';
+    
+    marketplaces.forEach(mp => {
+        const mpData = overview.data[mp];
+        if (!mpData) return;
+        
+        html += `<tr>
+            <td class="mp-cell"><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+        
+        metrics.forEach(metric => {
+            const data = mpData[metric] || {};
+            
+            // Format values based on metric type
+            const actualDisplay = formatMetricValue(data.actual, metric);
+            const forecastDisplay = formatMetricValue(data.manual_forecast, metric);
+            const devPct = data.manual_dev_pct;
+            
+            // Get deviation color class
+            const devColorClass = getDeviationColorClass(devPct);
+            const devDisplay = devPct !== null && devPct !== undefined 
+                ? `${devPct > 0 ? '+' : ''}${devPct.toFixed(1)}%` 
+                : '--';
+            
+            html += `
+                <td class="value-cell">${actualDisplay}</td>
+                <td class="value-cell forecast-cell">${forecastDisplay}</td>
+                <td class="deviation-cell ${devColorClass}">${devDisplay}</td>`;
+        });
+        
+        html += '</tr>';
+    });
+    
+    tableBody.innerHTML = html;
+}
+
+function formatMetricValue(value, metric) {
+    if (value === null || value === undefined) return '--';
+    
+    if (metric === 'Transit Conversion') {
+        // Show as percentage
+        return (value * 100).toFixed(2) + '%';
+    } else if (metric === 'UPO') {
+        // Show with 2 decimal places
+        return value.toFixed(2);
+    } else {
+        // Net Ordered Units and Transits - format with K/M suffix
+        if (Math.abs(value) >= 1000000) {
+            return (value / 1000000).toFixed(2) + 'M';
+        } else if (Math.abs(value) >= 1000) {
+            return (value / 1000).toFixed(1) + 'K';
+        }
+        return Math.round(value).toLocaleString();
+    }
+}
+
+function getDeviationColorClass(devPct) {
+    if (devPct === null || devPct === undefined) return '';
+    
+    const absDeviation = Math.abs(devPct);
+    
+    if (absDeviation < 20) {
+        return 'dev-green';
+    } else if (absDeviation >= 20 && absDeviation <= 30) {
+        return 'dev-yellow';
+    } else {
+        return 'dev-red';
+    }
 }
 
 function initializeTheme() {
@@ -312,6 +538,7 @@ function showDashboard() {
     updateStatistics();
     updateCharts();
     updateAccuracyPanel();
+    updateExportButtonState();
 }
 
 function updateAccuracyPanel() {
@@ -837,4 +1064,122 @@ function showToast(type, title, message) {
     container.appendChild(toast);
     
     setTimeout(() => toast.remove(), 5000);
+}
+
+// Historic Deviations functions
+async function loadHistoricDeviations() {
+    const metricSelect = document.getElementById('deviationMetricSelect');
+    const mpSelect = document.getElementById('deviationMpSelect');
+    
+    if (!metricSelect || !mpSelect) return;
+    
+    const metric = metricSelect.value;
+    const marketplace = mpSelect.value;
+    
+    try {
+        const response = await fetch(`/api/historic-deviations?metric=${encodeURIComponent(metric)}&marketplace=${encodeURIComponent(marketplace)}`);
+        const result = await response.json();
+        
+        if (result.success) {
+            renderHistoricDeviationsTable(result.deviations, result.summary, metric);
+        } else {
+            console.error('Failed to load historic deviations:', result.error);
+            showToast('error', 'Error', result.error || 'Failed to load historic deviations');
+        }
+    } catch (error) {
+        console.error('Error loading historic deviations:', error);
+        showToast('error', 'Error', 'Failed to load historic deviations');
+    }
+}
+
+function renderHistoricDeviationsTable(deviations, summary, metric) {
+    const tableBody = document.getElementById('historicDeviationsTableBody');
+    const summaryContainer = document.getElementById('deviationSummary');
+    
+    if (!tableBody) return;
+    
+    // Sort deviations by date descending (most recent first)
+    const sortedDeviations = [...deviations].sort((a, b) => new Date(b.date) - new Date(a.date));
+    
+    let html = '';
+    
+    sortedDeviations.forEach(d => {
+        const actualDisplay = formatMetricValue(d.actual, metric);
+        const manualFcDisplay = d.manual_forecast !== null ? formatMetricValue(d.manual_forecast, metric) : '--';
+        const manualDevDisplay = d.manual_dev_pct !== null 
+            ? `${d.manual_dev_pct > 0 ? '+' : ''}${d.manual_dev_pct.toFixed(1)}%` 
+            : '--';
+        const manualDevClass = getDeviationColorClass(d.manual_dev_pct);
+        
+        const modelFcDisplay = d.model_forecast !== null ? formatMetricValue(d.model_forecast, metric) : '--';
+        const modelDevDisplay = d.model_dev_pct !== null 
+            ? `${d.model_dev_pct > 0 ? '+' : ''}${d.model_dev_pct.toFixed(1)}%` 
+            : '--';
+        const modelDevClass = getDeviationColorClass(d.model_dev_pct);
+        
+        html += `
+            <tr>
+                <td class="week-cell">${d.week}</td>
+                <td class="value-cell">${actualDisplay}</td>
+                <td class="value-cell forecast-cell">${manualFcDisplay}</td>
+                <td class="deviation-cell ${manualDevClass}">${manualDevDisplay}</td>
+                <td class="value-cell forecast-cell">${modelFcDisplay}</td>
+                <td class="deviation-cell ${modelDevClass}">${modelDevDisplay}</td>
+            </tr>
+        `;
+    });
+    
+    tableBody.innerHTML = html || '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No data available</td></tr>';
+    
+    // Render summary
+    if (summaryContainer && summary) {
+        let summaryHtml = '<div class="deviation-summary-grid">';
+        
+        summaryHtml += `
+            <div class="summary-card">
+                <div class="summary-value">${summary.total_weeks}</div>
+                <div class="summary-label">Total Weeks</div>
+            </div>
+        `;
+        
+        if (summary.manual_forecast_weeks > 0) {
+            summaryHtml += `
+                <div class="summary-card">
+                    <div class="summary-value">${summary.manual_forecast_weeks}</div>
+                    <div class="summary-label">Manual FC Weeks</div>
+                </div>
+                <div class="summary-card ${getDeviationSummaryClass(summary.manual_avg_abs_dev)}">
+                    <div class="summary-value">${summary.manual_avg_abs_dev !== null ? summary.manual_avg_abs_dev.toFixed(1) + '%' : '--'}</div>
+                    <div class="summary-label">Manual Avg |Dev|</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">${summary.manual_avg_dev !== null ? (summary.manual_avg_dev > 0 ? '+' : '') + summary.manual_avg_dev.toFixed(1) + '%' : '--'}</div>
+                    <div class="summary-label">Manual Avg Bias</div>
+                </div>
+            `;
+        }
+        
+        if (summary.model_forecast_weeks > 0) {
+            summaryHtml += `
+                <div class="summary-card">
+                    <div class="summary-value">${summary.model_forecast_weeks}</div>
+                    <div class="summary-label">Model FC Weeks</div>
+                </div>
+                <div class="summary-card ${getDeviationSummaryClass(summary.model_avg_abs_dev)}">
+                    <div class="summary-value">${summary.model_avg_abs_dev !== null ? summary.model_avg_abs_dev.toFixed(1) + '%' : '--'}</div>
+                    <div class="summary-label">Model Avg |Dev|</div>
+                </div>
+            `;
+        }
+        
+        summaryHtml += '</div>';
+        summaryContainer.innerHTML = summaryHtml;
+    }
+}
+
+function getDeviationSummaryClass(avgDev) {
+    if (avgDev === null) return '';
+    if (avgDev < 20) return 'summary-good';
+    if (avgDev < 30) return 'summary-warn';
+    return 'summary-bad';
 }

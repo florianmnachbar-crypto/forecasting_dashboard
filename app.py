@@ -4,8 +4,11 @@ Flask Application - Main Entry Point
 """
 
 import os
+import io
+import csv
 import json
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from datetime import datetime
+from flask import Flask, render_template, request, jsonify, send_from_directory, Response, make_response
 from werkzeug.utils import secure_filename
 from data_processor import DataProcessor
 from forecaster import Forecaster
@@ -323,6 +326,31 @@ def generate_all_forecasts():
         return jsonify({'success': False, 'error': str(e)}), 500
 
 
+@app.route('/api/latest-week', methods=['GET'])
+def get_latest_week():
+    """Get latest week overview with all metrics and marketplaces"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        overview = data_processor.get_latest_week_overview()
+        if overview is None:
+            return jsonify({
+                'success': False,
+                'error': 'Could not calculate latest week overview'
+            }), 400
+        
+        return jsonify({
+            'success': True,
+            'overview': overview,
+            'has_manual_forecast': data_processor.has_manual_forecast
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
 @app.route('/api/status', methods=['GET'])
 def get_status():
     """Get current application status"""
@@ -336,6 +364,440 @@ def get_status():
         'marketplaces': DataProcessor.MARKETPLACES,
         'has_manual_forecast': data_processor.has_manual_forecast if data_processor else False
     })
+
+
+@app.route('/api/historic-deviations', methods=['GET'])
+def get_historic_deviations():
+    """Get historic deviations for actuals vs manual forecast and model forecast"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        metric = request.args.get('metric', 'Net Ordered Units')
+        marketplace = request.args.get('marketplace', 'UK')
+        
+        # Get actuals
+        actuals_df = data_processor.get_dataframe(metric, marketplace, is_forecast=False)
+        if actuals_df is None or actuals_df.empty:
+            return jsonify({
+                'success': False,
+                'error': f'No actuals data for {metric} - {marketplace}'
+            }), 400
+        
+        # Build the response data
+        deviations = []
+        
+        # Get manual forecast if available
+        manual_df = None
+        if data_processor.has_manual_forecast:
+            manual_df = data_processor.get_dataframe(metric, marketplace, is_forecast=True)
+        
+        # Process each week in actuals
+        for idx, row in actuals_df.iterrows():
+            week = row['week']
+            date = row['ds']
+            actual = row['y']
+            
+            record = {
+                'week': week,
+                'date': date.strftime('%Y-%m-%d'),
+                'actual': actual,
+                'manual_forecast': None,
+                'manual_dev': None,
+                'manual_dev_pct': None,
+                'model_forecast': None,
+                'model_dev': None,
+                'model_dev_pct': None
+            }
+            
+            # Get manual forecast value for this week
+            if manual_df is not None and not manual_df.empty:
+                manual_match = manual_df[manual_df['ds'] == date]
+                if not manual_match.empty:
+                    manual_val = manual_match['y'].iloc[0]
+                    record['manual_forecast'] = manual_val
+                    if manual_val != 0:
+                        dev = actual - manual_val
+                        dev_pct = (dev / manual_val) * 100
+                        record['manual_dev'] = round(dev, 4)
+                        record['manual_dev_pct'] = round(dev_pct, 1)
+            
+            deviations.append(record)
+        
+        # Calculate summary stats
+        manual_devs = [d['manual_dev_pct'] for d in deviations if d['manual_dev_pct'] is not None]
+        
+        summary = {
+            'total_weeks': len(deviations),
+            'manual_forecast_weeks': len(manual_devs),
+            'manual_avg_dev': round(sum(manual_devs) / len(manual_devs), 1) if manual_devs else None,
+            'manual_avg_abs_dev': round(sum(abs(d) for d in manual_devs) / len(manual_devs), 1) if manual_devs else None,
+            'model_forecast_weeks': 0,
+            'model_avg_dev': None,
+            'model_avg_abs_dev': None
+        }
+        
+        return jsonify({
+            'success': True,
+            'metric': metric,
+            'marketplace': marketplace,
+            'deviations': deviations,
+            'summary': summary,
+            'has_manual_forecast': data_processor.has_manual_forecast
+        })
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/export/csv', methods=['GET'])
+def export_csv():
+    """Export all data as CSV file"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        output = io.StringIO()
+        writer = csv.writer(output)
+        
+        # Section 1: Latest Week Overview
+        writer.writerow(['=' * 50])
+        writer.writerow(['LATEST WEEK OVERVIEW'])
+        writer.writerow(['=' * 50])
+        writer.writerow([])
+        
+        overview = data_processor.get_latest_week_overview()
+        if overview and 'latest_week' in overview:
+            writer.writerow(['Latest Week:', overview['latest_week']])
+            writer.writerow([])
+            
+            # Header row
+            header = ['Marketplace']
+            for metric in DataProcessor.METRICS:
+                header.extend([f'{metric} - Actual', f'{metric} - Forecast', f'{metric} - Deviation %'])
+            writer.writerow(header)
+            
+            # Data rows
+            for mp in ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES']:
+                if mp in overview.get('data', {}):
+                    row = [mp]
+                    for metric in DataProcessor.METRICS:
+                        mp_data = overview['data'][mp].get(metric, {})
+                        actual = mp_data.get('actual', '')
+                        forecast = mp_data.get('manual_forecast', '')
+                        deviation = mp_data.get('manual_dev_pct', '')
+                        
+                        # Format values
+                        if actual != '' and actual is not None:
+                            if metric in ['Transit Conversion']:
+                                actual = f'{actual:.4f}' if isinstance(actual, (int, float)) else actual
+                            elif metric in ['UPO']:
+                                actual = f'{actual:.2f}' if isinstance(actual, (int, float)) else actual
+                            else:
+                                actual = f'{actual:,.0f}' if isinstance(actual, (int, float)) else actual
+                        
+                        if forecast != '' and forecast is not None:
+                            if metric in ['Transit Conversion']:
+                                forecast = f'{forecast:.4f}' if isinstance(forecast, (int, float)) else forecast
+                            elif metric in ['UPO']:
+                                forecast = f'{forecast:.2f}' if isinstance(forecast, (int, float)) else forecast
+                            else:
+                                forecast = f'{forecast:,.0f}' if isinstance(forecast, (int, float)) else forecast
+                        
+                        if deviation != '' and deviation is not None:
+                            deviation = f'{deviation:.1f}%' if isinstance(deviation, (int, float)) else deviation
+                        
+                        row.extend([actual, forecast, deviation])
+                    writer.writerow(row)
+        
+        writer.writerow([])
+        writer.writerow([])
+        
+        # Section 2: Statistics Summary
+        writer.writerow(['=' * 50])
+        writer.writerow(['STATISTICS SUMMARY'])
+        writer.writerow(['=' * 50])
+        writer.writerow([])
+        
+        for metric in DataProcessor.METRICS:
+            writer.writerow([f'--- {metric} ---'])
+            writer.writerow(['Marketplace', 'Total', 'Average', 'Min', 'Max', 'T4W Total', 'T4W Average'])
+            
+            for mp in DataProcessor.MARKETPLACES:
+                stats = data_processor.get_summary_statistics(metric, mp)
+                if stats:
+                    writer.writerow([
+                        mp,
+                        f'{stats.get("total", 0):,.2f}',
+                        f'{stats.get("average", 0):,.2f}',
+                        f'{stats.get("min", 0):,.2f}',
+                        f'{stats.get("max", 0):,.2f}',
+                        f'{stats.get("t4w_total", 0):,.2f}',
+                        f'{stats.get("t4w_avg", 0):,.2f}'
+                    ])
+            writer.writerow([])
+        
+        writer.writerow([])
+        
+        # Section 3: Historical Data
+        writer.writerow(['=' * 50])
+        writer.writerow(['HISTORICAL DATA'])
+        writer.writerow(['=' * 50])
+        writer.writerow([])
+        
+        for metric in DataProcessor.METRICS:
+            writer.writerow([f'--- {metric} ---'])
+            
+            # Get all weeks from UK or first available marketplace
+            all_data = data_processor.get_all_data()
+            if metric in all_data:
+                metric_data = all_data[metric]
+                
+                # Collect all unique weeks
+                all_weeks = set()
+                for mp, mp_data in metric_data.items():
+                    if isinstance(mp_data, dict) and 'weeks' in mp_data:
+                        all_weeks.update(mp_data['weeks'])
+                
+                all_weeks = sorted(list(all_weeks))
+                
+                if all_weeks:
+                    # Header
+                    header = ['Week'] + DataProcessor.MARKETPLACES
+                    writer.writerow(header)
+                    
+                    # Data rows
+                    for week in all_weeks:
+                        row = [week]
+                        for mp in DataProcessor.MARKETPLACES:
+                            value = ''
+                            if mp in metric_data and isinstance(metric_data[mp], dict):
+                                weeks = metric_data[mp].get('weeks', [])
+                                values = metric_data[mp].get('values', [])
+                                if week in weeks:
+                                    idx = weeks.index(week)
+                                    if idx < len(values):
+                                        value = values[idx]
+                            row.append(value if value != '' else '')
+                        writer.writerow(row)
+            
+            writer.writerow([])
+        
+        # Create response
+        output.seek(0)
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        filename = f'amazon_haul_eu5_export_{timestamp}.csv'
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'text/csv'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        return response
+        
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/export/excel', methods=['GET'])
+def export_excel():
+    """Export all data as Excel file"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        import openpyxl
+        from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
+        from openpyxl.utils import get_column_letter
+        
+        wb = openpyxl.Workbook()
+        
+        # Styles
+        header_font = Font(bold=True, color='FFFFFF')
+        header_fill = PatternFill(start_color='232F3E', end_color='232F3E', fill_type='solid')
+        subheader_fill = PatternFill(start_color='37475A', end_color='37475A', fill_type='solid')
+        good_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
+        warn_fill = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')
+        bad_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
+        thin_border = Border(
+            left=Side(style='thin'),
+            right=Side(style='thin'),
+            top=Side(style='thin'),
+            bottom=Side(style='thin')
+        )
+        
+        # Sheet 1: Latest Week Overview
+        ws1 = wb.active
+        ws1.title = 'Latest Week Overview'
+        
+        overview = data_processor.get_latest_week_overview()
+        if overview and 'latest_week' in overview:
+            ws1['A1'] = f'Latest Week: {overview["latest_week"]}'
+            ws1['A1'].font = Font(bold=True, size=14)
+            
+            # Header row
+            row = 3
+            headers = ['Marketplace']
+            for metric in DataProcessor.METRICS:
+                headers.extend([f'{metric}\nActual', f'{metric}\nForecast', f'{metric}\nDev %'])
+            
+            for col, header in enumerate(headers, 1):
+                cell = ws1.cell(row=row, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
+                cell.border = thin_border
+                ws1.column_dimensions[get_column_letter(col)].width = 12
+            
+            ws1.row_dimensions[row].height = 40
+            
+            # Data rows
+            for mp in ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES']:
+                if mp in overview.get('data', {}):
+                    row += 1
+                    col = 1
+                    ws1.cell(row=row, column=col, value=mp).border = thin_border
+                    
+                    for metric in DataProcessor.METRICS:
+                        mp_data = overview['data'][mp].get(metric, {})
+                        actual = mp_data.get('actual')
+                        forecast = mp_data.get('manual_forecast')
+                        deviation = mp_data.get('manual_dev_pct')
+                        
+                        col += 1
+                        cell = ws1.cell(row=row, column=col, value=actual if actual is not None else '')
+                        cell.border = thin_border
+                        cell.alignment = Alignment(horizontal='right')
+                        
+                        col += 1
+                        cell = ws1.cell(row=row, column=col, value=forecast if forecast is not None else '')
+                        cell.border = thin_border
+                        cell.alignment = Alignment(horizontal='right')
+                        
+                        col += 1
+                        cell = ws1.cell(row=row, column=col, value=f'{deviation:.1f}%' if deviation is not None else '')
+                        cell.border = thin_border
+                        cell.alignment = Alignment(horizontal='right')
+                        
+                        # Color code deviation
+                        if deviation is not None:
+                            abs_dev = abs(deviation)
+                            if abs_dev < 20:
+                                cell.fill = good_fill
+                            elif abs_dev < 30:
+                                cell.fill = warn_fill
+                            else:
+                                cell.fill = bad_fill
+        
+        # Sheet 2: Statistics
+        ws2 = wb.create_sheet('Statistics')
+        row = 1
+        
+        for metric in DataProcessor.METRICS:
+            ws2.cell(row=row, column=1, value=metric).font = Font(bold=True, size=12)
+            row += 1
+            
+            headers = ['Marketplace', 'Total', 'Average', 'Min', 'Max', 'T4W Total', 'T4W Average']
+            for col, header in enumerate(headers, 1):
+                cell = ws2.cell(row=row, column=col, value=header)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.border = thin_border
+                ws2.column_dimensions[get_column_letter(col)].width = 14
+            
+            row += 1
+            for mp in DataProcessor.MARKETPLACES:
+                stats = data_processor.get_summary_statistics(metric, mp)
+                if stats:
+                    ws2.cell(row=row, column=1, value=mp).border = thin_border
+                    ws2.cell(row=row, column=2, value=stats.get('total', 0)).border = thin_border
+                    ws2.cell(row=row, column=3, value=stats.get('average', 0)).border = thin_border
+                    ws2.cell(row=row, column=4, value=stats.get('min', 0)).border = thin_border
+                    ws2.cell(row=row, column=5, value=stats.get('max', 0)).border = thin_border
+                    ws2.cell(row=row, column=6, value=stats.get('t4w_total', 0)).border = thin_border
+                    ws2.cell(row=row, column=7, value=stats.get('t4w_avg', 0)).border = thin_border
+                    row += 1
+            
+            row += 2
+        
+        # Sheet 3-6: Historical Data for each metric
+        all_data = data_processor.get_all_data()
+        
+        for metric in DataProcessor.METRICS:
+            # Clean sheet name (Excel limits to 31 chars)
+            sheet_name = metric[:31] if len(metric) > 31 else metric
+            ws = wb.create_sheet(sheet_name)
+            
+            if metric in all_data:
+                metric_data = all_data[metric]
+                
+                # Collect all unique weeks
+                all_weeks = set()
+                for mp, mp_data in metric_data.items():
+                    if isinstance(mp_data, dict) and 'weeks' in mp_data:
+                        all_weeks.update(mp_data['weeks'])
+                
+                all_weeks = sorted(list(all_weeks))
+                
+                if all_weeks:
+                    # Header
+                    headers = ['Week'] + DataProcessor.MARKETPLACES
+                    for col, header in enumerate(headers, 1):
+                        cell = ws.cell(row=1, column=col, value=header)
+                        cell.font = header_font
+                        cell.fill = header_fill
+                        cell.border = thin_border
+                        ws.column_dimensions[get_column_letter(col)].width = 14
+                    
+                    # Data rows
+                    for row_idx, week in enumerate(all_weeks, 2):
+                        ws.cell(row=row_idx, column=1, value=week).border = thin_border
+                        
+                        for col_idx, mp in enumerate(DataProcessor.MARKETPLACES, 2):
+                            value = ''
+                            if mp in metric_data and isinstance(metric_data[mp], dict):
+                                weeks = metric_data[mp].get('weeks', [])
+                                values = metric_data[mp].get('values', [])
+                                if week in weeks:
+                                    idx = weeks.index(week)
+                                    if idx < len(values):
+                                        value = values[idx]
+                            
+                            cell = ws.cell(row=row_idx, column=col_idx, value=value if value != '' else None)
+                            cell.border = thin_border
+        
+        # Save to bytes
+        output = io.BytesIO()
+        wb.save(output)
+        output.seek(0)
+        
+        timestamp = datetime.now().strftime('%Y-%m-%d')
+        filename = f'amazon_haul_eu5_export_{timestamp}.xlsx'
+        
+        response = make_response(output.getvalue())
+        response.headers['Content-Type'] = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'
+        response.headers['Content-Disposition'] = f'attachment; filename={filename}'
+        
+        return response
+        
+    except ImportError:
+        return jsonify({
+            'success': False, 
+            'error': 'openpyxl library not installed. Please install it with: pip install openpyxl'
+        }), 500
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 
 # Static file serving for development
