@@ -391,6 +391,69 @@ def _prepare_promo_exog(data_processor, metric, marketplace, df, forecast_horizo
         return None, None, None
 
 
+def _apply_promo_floor(promo_forecast, baseline_forecast, future_scores):
+    """Apply floor logic: promo score > 1 cannot decrease forecast below baseline
+    
+    For each future week:
+    - If promo_score > 1.0: use max(baseline, promo_adjusted)
+    - Otherwise: use promo_adjusted as-is
+    
+    This ensures that marking a week as "promo" can only improve the forecast, never decrease it.
+    """
+    floored_values = []
+    floored_lower = []
+    floored_upper = []
+    floor_applied_count = 0
+    
+    for i in range(len(promo_forecast['values'])):
+        promo_val = promo_forecast['values'][i]
+        baseline_val = baseline_forecast['values'][i]
+        promo_score = future_scores[i] if i < len(future_scores) else 1.0
+        
+        # If promo score > 1, apply floor (promo cannot decrease forecast)
+        if promo_score > 1.0:
+            if promo_val < baseline_val:
+                # Promo model decreased the forecast - use baseline instead
+                floored_values.append(baseline_val)
+                floor_applied_count += 1
+            else:
+                floored_values.append(promo_val)
+        else:
+            # Non-promo week - use promo forecast as-is
+            floored_values.append(promo_val)
+        
+        # Apply same logic to confidence intervals
+        promo_lower = promo_forecast['lower_bound'][i]
+        baseline_lower = baseline_forecast['lower_bound'][i]
+        promo_upper = promo_forecast['upper_bound'][i]
+        baseline_upper = baseline_forecast['upper_bound'][i]
+        
+        if promo_score > 1.0:
+            floored_lower.append(max(promo_lower, baseline_lower))
+            floored_upper.append(max(promo_upper, baseline_upper))
+        else:
+            floored_lower.append(promo_lower)
+            floored_upper.append(promo_upper)
+    
+    # Return modified forecast
+    result = promo_forecast.copy()
+    result['values'] = floored_values
+    result['lower_bound'] = floored_lower
+    result['upper_bound'] = floored_upper
+    
+    # Add floor info to model_info
+    if 'model_info' not in result:
+        result['model_info'] = {}
+    result['model_info']['promo_floor_applied'] = True
+    result['model_info']['floor_applied_weeks'] = floor_applied_count
+    
+    # Update model name to indicate flooring
+    if floor_applied_count > 0:
+        result['model'] = result.get('model', 'SARIMAX') + ' (Floored)'
+    
+    return result
+
+
 @app.route('/api/forecast/all', methods=['POST'])
 def generate_all_forecasts():
     """Generate forecasts for all metrics and marketplaces
@@ -429,6 +492,7 @@ def generate_all_forecasts():
                     exog = None
                     future_exog = None
                     promo_info = None
+                    future_scores = None
                     
                     if include_promo and data_processor.has_promo_scores and model_type.lower() == 'sarimax':
                         exog, future_exog, promo_info = _prepare_promo_exog(
@@ -436,11 +500,25 @@ def generate_all_forecasts():
                         )
                         if promo_info:
                             promo_applied_count += 1
+                            # Extract future promo scores for floor logic
+                            future_scores = [item['score'] for item in promo_info.get('future_scores', [])]
                     
                     if model_type.lower() == 'sarimax':
+                        # Generate baseline forecast (no promo) for floor comparison
+                        baseline_forecast = None
+                        if include_promo and exog is not None:
+                            baseline_forecast = forecaster.forecast_sarimax(
+                                df, use_seasonality=use_seasonality, exog=None, future_exog=None
+                            )
+                        
+                        # Generate promo-adjusted forecast
                         forecast = forecaster.forecast_sarimax(
                             df, use_seasonality=use_seasonality, exog=exog, future_exog=future_exog
                         )
+                        
+                        # Apply floor: promo score > 1 cannot decrease forecast below baseline
+                        if forecast and baseline_forecast and future_scores:
+                            forecast = _apply_promo_floor(forecast, baseline_forecast, future_scores)
                     else:
                         forecast = forecaster.generate_forecast(
                             df, model_type=model_type, use_seasonality=use_seasonality
