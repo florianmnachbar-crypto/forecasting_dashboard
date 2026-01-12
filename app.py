@@ -207,25 +207,24 @@ def get_promo_analysis():
 
 @app.route('/api/forecast-uplift', methods=['GET'])
 def get_forecast_uplift():
-    """Get forecast data with promo uplift applied for all metrics and marketplaces"""
+    """Get forecast data with promo uplift applied
+    
+    Note: Promo uplift is now ONLY applied to the SARIMAX model forecast, 
+    not to manual forecasts. Manual forecasts are returned as-is.
+    Use /api/forecast with include_promo=True for SARIMAX with promo regressor.
+    """
     global data_processor
     
     if data_processor is None:
         return jsonify({'success': False, 'error': 'No data loaded'}), 400
     
     try:
-        if not data_processor.has_promo_scores or not data_processor.has_manual_forecast:
-            return jsonify({
-                'success': True,
-                'has_uplift_data': False,
-                'uplift_data': None
-            })
-        
-        uplift_data = data_processor.get_all_forecast_with_uplift()
+        # Promo uplift is now only available via SARIMAX model, not manual forecast
         return jsonify({
             'success': True,
-            'has_uplift_data': True,
-            'uplift_data': uplift_data
+            'has_uplift_data': False,
+            'uplift_data': None,
+            'message': 'Promo uplift is now applied via SARIMAX model regressor. Use /api/forecast with include_promo=true to generate promo-adjusted model forecasts.'
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
@@ -258,7 +257,10 @@ def get_statistics():
 
 @app.route('/api/forecast', methods=['POST'])
 def generate_forecast():
-    """Generate forecast for specified metric and marketplace"""
+    """Generate forecast for specified metric and marketplace
+    
+    If promo scores are available and include_promo=True, applies promo uplift to SARIMAX model
+    """
     global data_processor
     
     if data_processor is None:
@@ -270,6 +272,7 @@ def generate_forecast():
         marketplace = params.get('marketplace', 'UK')
         model_type = params.get('model', 'sarimax')
         use_seasonality = params.get('seasonality', True)
+        include_promo = params.get('include_promo', False)  # NEW: whether to include promo as regressor
         
         # Get the data
         df = data_processor.get_dataframe(metric, marketplace)
@@ -282,13 +285,29 @@ def generate_forecast():
         
         # Generate forecast
         forecaster = Forecaster(forecast_horizon=12)
-        forecast = forecaster.generate_forecast(df, model_type=model_type, use_seasonality=use_seasonality)
+        
+        # Prepare promo scores if requested and available
+        exog = None
+        future_exog = None
+        promo_info = None
+        
+        if include_promo and data_processor.has_promo_scores and model_type.lower() == 'sarimax':
+            exog, future_exog, promo_info = _prepare_promo_exog(data_processor, metric, marketplace, df, forecaster.forecast_horizon)
+        
+        if model_type.lower() == 'sarimax':
+            forecast = forecaster.forecast_sarimax(df, use_seasonality=use_seasonality, exog=exog, future_exog=future_exog)
+        else:
+            forecast = forecaster.generate_forecast(df, model_type=model_type, use_seasonality=use_seasonality)
         
         if forecast is None:
             return jsonify({
                 'success': False,
                 'error': 'Failed to generate forecast. Insufficient data.'
             }), 400
+        
+        # Add promo info if used
+        if promo_info:
+            forecast['promo_info'] = promo_info
         
         # Calculate forecast statistics
         forecast_stats = {
@@ -303,11 +322,73 @@ def generate_forecast():
             'forecast': forecast,
             'forecast_statistics': forecast_stats,
             'metric': metric,
-            'marketplace': marketplace
+            'marketplace': marketplace,
+            'promo_uplift_applied': promo_info is not None
         })
         
     except Exception as e:
+        import traceback
+        traceback.print_exc()
         return jsonify({'success': False, 'error': str(e)}), 500
+
+
+def _prepare_promo_exog(data_processor, metric, marketplace, df, forecast_horizon):
+    """Prepare exogenous promo score data for SARIMAX model
+    
+    Returns (historical_exog, future_exog, promo_info) tuple
+    """
+    import pandas as pd
+    from datetime import timedelta
+    
+    try:
+        # Build historical promo scores aligned with actuals
+        promo_scores = []
+        weeks_with_scores = 0
+        
+        for _, row in df.iterrows():
+            week_label = data_processor.format_week_label(row['ds'])
+            score = data_processor.get_promo_score_for_week(marketplace, week_label)
+            
+            if score is not None:
+                promo_scores.append(score)
+                weeks_with_scores += 1
+            else:
+                # Use baseline score (1.0) for missing weeks
+                promo_scores.append(1.0)
+        
+        # Create exog dataframe
+        exog = pd.DataFrame({
+            'ds': df['ds'],
+            'promo_score': promo_scores
+        })
+        
+        # Prepare future promo scores
+        last_date = df['ds'].max()
+        future_dates = [last_date + timedelta(weeks=i+1) for i in range(forecast_horizon)]
+        future_scores = []
+        
+        for future_date in future_dates:
+            week_label = data_processor.format_week_label(future_date)
+            score = data_processor.get_promo_score_for_week(marketplace, week_label)
+            future_scores.append(score if score is not None else 1.0)  # Default to baseline
+        
+        future_exog = pd.DataFrame({
+            'ds': future_dates,
+            'promo_score': future_scores
+        })
+        
+        promo_info = {
+            'historical_weeks_with_scores': weeks_with_scores,
+            'total_historical_weeks': len(df),
+            'future_scores': [{'week': data_processor.format_week_label(d), 'score': s} 
+                             for d, s in zip(future_dates, future_scores)]
+        }
+        
+        return exog, future_exog, promo_info
+        
+    except Exception as e:
+        print(f"Warning: Could not prepare promo exog: {e}")
+        return None, None, None
 
 
 @app.route('/api/forecast/all', methods=['POST'])
@@ -316,6 +397,8 @@ def generate_all_forecasts():
     
     Net Ordered Units is calculated as: Transits × Transit Conversion × UPO
     The other metrics (Transits, Transit Conversion, UPO) are forecasted independently
+    
+    If include_promo=True, promo scores are used as SARIMAX regressors for all driver metrics
     """
     global data_processor
     
@@ -326,9 +409,11 @@ def generate_all_forecasts():
         params = request.get_json()
         model_type = params.get('model', 'sarimax')
         use_seasonality = params.get('seasonality', True)
+        include_promo = params.get('include_promo', False)  # NEW: include promo as SARIMAX regressor
         
         forecasts = {}
         forecaster = Forecaster(forecast_horizon=12)
+        promo_applied_count = 0
         
         # Driver metrics that are forecasted independently
         driver_metrics = ['Transits', 'Transit Conversion', 'UPO']
@@ -340,8 +425,30 @@ def generate_all_forecasts():
                 df = data_processor.get_dataframe(metric, mp)
                 
                 if df is not None and not df.empty and len(df) >= 4:
-                    forecast = forecaster.generate_forecast(df, model_type=model_type, use_seasonality=use_seasonality)
+                    # Prepare promo exog if requested
+                    exog = None
+                    future_exog = None
+                    promo_info = None
+                    
+                    if include_promo and data_processor.has_promo_scores and model_type.lower() == 'sarimax':
+                        exog, future_exog, promo_info = _prepare_promo_exog(
+                            data_processor, metric, mp, df, forecaster.forecast_horizon
+                        )
+                        if promo_info:
+                            promo_applied_count += 1
+                    
+                    if model_type.lower() == 'sarimax':
+                        forecast = forecaster.forecast_sarimax(
+                            df, use_seasonality=use_seasonality, exog=exog, future_exog=future_exog
+                        )
+                    else:
+                        forecast = forecaster.generate_forecast(
+                            df, model_type=model_type, use_seasonality=use_seasonality
+                        )
+                    
                     if forecast:
+                        if promo_info:
+                            forecast['promo_info'] = promo_info
                         forecasts[metric][mp] = forecast
         
         # Calculate Net Ordered Units from the multiplication of driver metrics
