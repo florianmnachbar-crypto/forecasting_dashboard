@@ -118,7 +118,11 @@ def get_data():
 
 @app.route('/api/accuracy', methods=['GET'])
 def get_accuracy():
-    """Get forecast accuracy metrics for manual forecast vs actuals"""
+    """Get forecast accuracy metrics for manual forecast vs actuals
+    
+    Query parameters:
+    - timeframe: 'total' (all overlap), 't4w' (last 4 weeks), or 'cw' (current week only)
+    """
     global data_processor
     
     if data_processor is None:
@@ -132,11 +136,96 @@ def get_accuracy():
         })
     
     try:
-        accuracy = data_processor.get_all_accuracy_metrics()
+        # Get timeframe from query parameter (default to 'total')
+        timeframe = request.args.get('timeframe', 'total')
+        # Validate timeframe
+        if timeframe not in ['total', 't4w', 'cw']:
+            timeframe = 'total'
+        
+        accuracy = data_processor.get_all_accuracy_metrics(timeframe=timeframe)
         return jsonify({
             'success': True,
             'has_manual_forecast': True,
-            'accuracy': accuracy
+            'accuracy': accuracy,
+            'timeframe': timeframe
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/promo-scores', methods=['GET'])
+def get_promo_scores():
+    """Get promo scores data for visualization overlays"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        if not data_processor.has_promo_scores:
+            return jsonify({
+                'success': True,
+                'has_promo_scores': False,
+                'promo_data': None
+            })
+        
+        promo_data = data_processor.get_promo_scores_data()
+        return jsonify({
+            'success': True,
+            'has_promo_scores': True,
+            'promo_data': promo_data
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/promo-analysis', methods=['GET'])
+def get_promo_analysis():
+    """Get promo uplift analysis for all metrics and marketplaces"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        if not data_processor.has_promo_scores:
+            return jsonify({
+                'success': True,
+                'has_promo_scores': False,
+                'analysis': None
+            })
+        
+        analysis = data_processor.get_all_promo_analysis()
+        return jsonify({
+            'success': True,
+            'has_promo_scores': True,
+            'analysis': analysis
+        })
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+
+@app.route('/api/forecast-uplift', methods=['GET'])
+def get_forecast_uplift():
+    """Get forecast data with promo uplift applied for all metrics and marketplaces"""
+    global data_processor
+    
+    if data_processor is None:
+        return jsonify({'success': False, 'error': 'No data loaded'}), 400
+    
+    try:
+        if not data_processor.has_promo_scores or not data_processor.has_manual_forecast:
+            return jsonify({
+                'success': True,
+                'has_uplift_data': False,
+                'uplift_data': None
+            })
+        
+        uplift_data = data_processor.get_all_forecast_with_uplift()
+        return jsonify({
+            'success': True,
+            'has_uplift_data': True,
+            'uplift_data': uplift_data
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

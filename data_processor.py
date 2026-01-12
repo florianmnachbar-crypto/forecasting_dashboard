@@ -21,13 +21,24 @@ class DataProcessor:
     }
     MARKETPLACES = ['UK', 'DE', 'FR', 'IT', 'ES', 'EU5']
     
+    # Promo score bands for analysis
+    PROMO_BANDS = [
+        (0, 1, 'No/Low Promo'),
+        (1.1, 2, 'Light Promo'),
+        (2.1, 3, 'Medium Promo'),
+        (3.1, 5, 'Strong Promo')
+    ]
+    
     def __init__(self):
         self.data = {}  # Actuals data
         self.manual_forecast = {}  # Manual forecast data
+        self.promo_scores = {}  # Promo scores by marketplace and week
+        self.promo_descriptions = {}  # Campaign descriptions
         self.weeks = []
         self.forecast_weeks = []
         self.raw_df = None
         self.has_manual_forecast = False
+        self.has_promo_scores = False
         
     def parse_week_column(self, col_name):
         """Convert week column name to datetime"""
@@ -101,6 +112,10 @@ class DataProcessor:
             # Load manual forecast if available
             if 'Forecast' in sheet_names:
                 self._load_manual_forecast(file_path, 'Forecast')
+            
+            # Load promo scores if available
+            if 'Promo Scores' in sheet_names:
+                self.load_promo_scores(file_path)
             
             return True, "File loaded successfully"
             
@@ -337,8 +352,13 @@ class DataProcessor:
         
         return result
     
-    def calculate_forecast_accuracy(self, metric, marketplace):
+    def calculate_forecast_accuracy(self, metric, marketplace, timeframe='total'):
         """Calculate accuracy metrics for manual forecast vs actuals
+        
+        Args:
+            metric: The metric name
+            marketplace: The marketplace code
+            timeframe: 'total' (all overlap), 't4w' (last 4 weeks), or 'cw' (current week only)
         
         Returns MAPE, WMAPE, Bias, and Accuracy for overlapping periods
         """
@@ -364,6 +384,21 @@ class DataProcessor:
         )
         
         if merged.empty or len(merged) < 1:
+            return None
+        
+        # Sort by date to ensure correct ordering for timeframe filtering
+        merged = merged.sort_values('ds')
+        
+        # Apply timeframe filter
+        if timeframe == 'cw':
+            # Current week only - take the most recent overlapping week
+            merged = merged.tail(1)
+        elif timeframe == 't4w':
+            # Trailing 4 weeks - take the last 4 overlapping weeks
+            merged = merged.tail(4)
+        # else: 'total' - use all overlapping data
+        
+        if merged.empty:
             return None
         
         # Calculate metrics
@@ -398,11 +433,16 @@ class DataProcessor:
             'overlap_weeks': len(valid_data),
             'total_actual': round(total_actual, 2),
             'total_forecast': round(valid_data['forecast'].sum(), 2),
-            'periods': [d.strftime('%Y-%m-%d') for d in valid_data['ds']]
+            'periods': [d.strftime('%Y-%m-%d') for d in valid_data['ds']],
+            'timeframe': timeframe
         }
     
-    def get_all_accuracy_metrics(self):
-        """Get forecast accuracy for all metrics and marketplaces"""
+    def get_all_accuracy_metrics(self, timeframe='total'):
+        """Get forecast accuracy for all metrics and marketplaces
+        
+        Args:
+            timeframe: 'total' (all overlap), 't4w' (last 4 weeks), or 'cw' (current week only)
+        """
         if not self.has_manual_forecast:
             return None
         
@@ -411,7 +451,7 @@ class DataProcessor:
         for metric in self.METRICS:
             result[metric] = {}
             for mp in self.MARKETPLACES:
-                accuracy = self.calculate_forecast_accuracy(metric, mp)
+                accuracy = self.calculate_forecast_accuracy(metric, mp, timeframe=timeframe)
                 if accuracy:
                     result[metric][mp] = accuracy
         
@@ -640,6 +680,440 @@ class DataProcessor:
             valid_count = sum(1 for v in eu5_values if not np.isnan(v))
             source_name = "forecast" if is_forecast else "actuals"
             print(f"  EU5 ({metric}) [{source_name}]: {valid_count} valid data points (calculated)")
+    
+    def load_promo_scores(self, file_path):
+        """Load promo scores from the 'Promo Scores' sheet"""
+        try:
+            xl = pd.ExcelFile(file_path)
+            if 'Promo Scores' not in xl.sheet_names:
+                print("No 'Promo Scores' sheet found")
+                return False
+            
+            df = pd.read_excel(file_path, sheet_name='Promo Scores', header=None)
+            print(f"Promo Scores sheet: {df.shape[0]} rows, {df.shape[1]} columns")
+            
+            self.promo_scores = {}
+            self.promo_descriptions = {}
+            
+            # Find the header row (row containing "MP")
+            header_row = None
+            mp_col = None
+            
+            for row_idx in range(min(5, len(df))):
+                for col_idx in range(min(5, len(df.columns))):
+                    cell = df.iloc[row_idx, col_idx]
+                    if pd.notna(cell) and str(cell).strip() == 'MP':
+                        header_row = row_idx
+                        mp_col = col_idx
+                        break
+                if header_row is not None:
+                    break
+            
+            if header_row is None:
+                print("Could not find 'MP' header in Promo Scores sheet")
+                return False
+            
+            print(f"Found MP header at row {header_row}, col {mp_col}")
+            
+            # Parse week headers from the header row (columns after MP)
+            promo_weeks = []
+            week_col_map = {}  # Maps column index to normalized week label
+            
+            for col_idx in range(mp_col + 1, len(df.columns)):
+                header = df.iloc[header_row, col_idx]
+                if pd.isna(header):
+                    continue
+                
+                header_str = str(header).strip()
+                normalized_week = self._normalize_promo_week(header_str)
+                if normalized_week:
+                    promo_weeks.append(normalized_week)
+                    week_col_map[col_idx] = normalized_week
+            
+            print(f"Found {len(promo_weeks)} week columns in promo scores")
+            
+            if not week_col_map:
+                print("No valid week columns found")
+                return False
+            
+            # Parse marketplace rows (rows after header)
+            individual_mps = ['UK', 'DE', 'FR', 'IT', 'ES', 'EU5']
+            
+            for row_idx in range(header_row + 1, min(header_row + 10, len(df))):
+                mp_value = df.iloc[row_idx, mp_col]
+                if pd.isna(mp_value):
+                    continue
+                
+                mp_name = str(mp_value).strip()
+                
+                if mp_name in individual_mps:
+                    self.promo_scores[mp_name] = {}
+                    
+                    for col_idx, week_label in week_col_map.items():
+                        val = df.iloc[row_idx, col_idx]
+                        if pd.notna(val):
+                            try:
+                                score = float(val)
+                                self.promo_scores[mp_name][week_label] = score
+                            except (ValueError, TypeError):
+                                # Not a number, might be description row
+                                pass
+                    
+                    score_count = len(self.promo_scores[mp_name])
+                    print(f"  {mp_name}: {score_count} promo scores")
+                elif mp_name == 'WK':
+                    # This marks the start of description rows
+                    break
+            
+            # Find and parse description rows (look for second set of MP rows after "WK" marker)
+            wk_row = None
+            for row_idx in range(header_row + 1, min(header_row + 15, len(df))):
+                mp_value = df.iloc[row_idx, mp_col]
+                if pd.notna(mp_value) and str(mp_value).strip() == 'WK':
+                    wk_row = row_idx
+                    break
+            
+            if wk_row is not None:
+                for row_idx in range(wk_row + 1, min(wk_row + 10, len(df))):
+                    mp_value = df.iloc[row_idx, mp_col]
+                    if pd.isna(mp_value):
+                        continue
+                    
+                    mp_name = str(mp_value).strip()
+                    
+                    if mp_name in individual_mps:
+                        self.promo_descriptions[mp_name] = {}
+                        
+                        for col_idx, week_label in week_col_map.items():
+                            val = df.iloc[row_idx, col_idx]
+                            if pd.notna(val):
+                                desc = str(val).strip()
+                                if desc and desc != '0' and not desc.replace('.', '').replace('-', '').isdigit():
+                                    self.promo_descriptions[mp_name][week_label] = desc
+            
+            if self.promo_scores:
+                self.has_promo_scores = True
+                # Recalculate EU5 promo scores to only include weeks with full coverage
+                self._calculate_eu5_promo_scores()
+                print("Promo scores loaded successfully")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Warning: Could not load promo scores: {str(e)}")
+            return False
+    
+    def _normalize_promo_week(self, week_str, default_year=2025):
+        """Normalize week string from promo scores to standard format (Wk## YYYY)
+        
+        Handles various formats:
+        - "Wk19" or "Wk 19" -> "Wk19 2025" (uses default_year)
+        - "2026 wk1" or "2026 wk 1" -> "Wk01 2026"
+        - "Wk19 2025" or "Wk 1 2026" -> "Wk19 2025" / "Wk01 2026"
+        """
+        if not week_str:
+            return None
+        
+        week_str = str(week_str).strip()
+        
+        # Pattern 1: "Wk19" or "Wk 19" (no year - use default_year)
+        match = re.match(r'^Wk\s*(\d+)$', week_str, re.IGNORECASE)
+        if match:
+            week_num = int(match.group(1))
+            return f"Wk{week_num:02d} {default_year}"
+        
+        # Pattern 2: "2026 wk1" or "2026 wk 1" or "2026wk1" (year prefix)
+        match = re.match(r'^(\d{4})\s*wk\s*(\d+)$', week_str, re.IGNORECASE)
+        if match:
+            year = int(match.group(1))
+            week_num = int(match.group(2))
+            return f"Wk{week_num:02d} {year}"
+        
+        # Pattern 3: "Wk19 2025" or "Wk 1 2026" (already has year)
+        match = re.match(r'^Wk\s*(\d+)\s+(\d{4})$', week_str, re.IGNORECASE)
+        if match:
+            week_num = int(match.group(1))
+            year = int(match.group(2))
+            return f"Wk{week_num:02d} {year}"
+        
+        return None
+    
+    def _calculate_eu5_promo_scores(self):
+        """Recalculate EU5 promo scores to only include weeks where all 5 MPs have data"""
+        individual_mps = ['UK', 'DE', 'FR', 'IT', 'ES']
+        
+        # Get all weeks that appear in any individual MP promo scores
+        all_weeks = set()
+        for mp in individual_mps:
+            if mp in self.promo_scores:
+                all_weeks.update(self.promo_scores[mp].keys())
+        
+        # For EU5, only include weeks where ALL 5 MPs have promo scores
+        eu5_scores = {}
+        for week in all_weeks:
+            scores = []
+            for mp in individual_mps:
+                if mp in self.promo_scores and week in self.promo_scores[mp]:
+                    scores.append(self.promo_scores[mp][week])
+            
+            # Only include if all 5 MPs have data for this week
+            if len(scores) == 5:
+                # Use average of all MP scores for EU5
+                eu5_scores[week] = round(sum(scores) / len(scores), 2)
+        
+        self.promo_scores['EU5'] = eu5_scores
+        print(f"  EU5 promo scores recalculated: {len(eu5_scores)} weeks (full coverage only)")
+    
+    def get_promo_scores_data(self):
+        """Get promo scores in a structured format for the frontend"""
+        if not self.has_promo_scores:
+            return None
+        
+        result = {
+            'scores': self.promo_scores,
+            'descriptions': self.promo_descriptions,
+            'bands': [
+                {'min': b[0], 'max': b[1], 'label': b[2]} 
+                for b in self.PROMO_BANDS
+            ]
+        }
+        
+        return result
+    
+    def get_promo_score_for_week(self, marketplace, week_label):
+        """Get the promo score for a specific marketplace and week
+        
+        Handles matching between different week formats:
+        - Actuals: "Wk19 2025", "Wk01 2026"
+        - Promo scores: "Wk19 2025", "Wk01 2026" (after normalization)
+        """
+        if not self.has_promo_scores:
+            return None
+        
+        if marketplace not in self.promo_scores:
+            return None
+        
+        mp_scores = self.promo_scores[marketplace]
+        
+        # Try exact match first
+        if week_label in mp_scores:
+            return mp_scores[week_label]
+        
+        # Normalize the input week label and try again
+        normalized_input = self._normalize_promo_week(week_label)
+        if normalized_input and normalized_input in mp_scores:
+            return mp_scores[normalized_input]
+        
+        # Try matching by extracting week number and year from the input
+        # Parse "Wk19 2025" or "Wk 1 2026" format
+        match = re.match(r'^Wk\s*(\d+)\s+(\d{4})$', str(week_label).strip(), re.IGNORECASE)
+        if match:
+            week_num = int(match.group(1))
+            year = int(match.group(2))
+            
+            # Try different normalized formats
+            possible_keys = [
+                f"Wk{week_num:02d} {year}",
+                f"Wk{week_num} {year}",
+            ]
+            
+            for key in possible_keys:
+                if key in mp_scores:
+                    return mp_scores[key]
+        
+        return None
+    
+    def get_promo_band(self, score):
+        """Get the promo band label for a given score"""
+        if score is None:
+            return None
+        
+        for min_val, max_val, label in self.PROMO_BANDS:
+            if min_val <= score <= max_val:
+                return label
+        
+        return 'Unknown'
+    
+    def calculate_promo_uplift_analysis(self, metric='Net Ordered Units'):
+        """Calculate performance uplift coefficients for each promo band
+        
+        Returns uplift factors relative to baseline (no/low promo weeks)
+        """
+        if not self.has_promo_scores or not self.data:
+            return None
+        
+        # Collect data points by promo band for each marketplace
+        result = {}
+        
+        for mp in ['UK', 'DE', 'FR', 'IT', 'ES', 'EU5']:
+            df = self.get_dataframe(metric, mp, is_forecast=False)
+            if df is None or df.empty:
+                continue
+            
+            # Group data by promo band
+            band_data = {b[2]: [] for b in self.PROMO_BANDS}
+            
+            for _, row in df.iterrows():
+                week_label = self.format_week_label(row['ds'])
+                score = self.get_promo_score_for_week(mp, week_label)
+                
+                if score is not None:
+                    band = self.get_promo_band(score)
+                    if band in band_data:
+                        band_data[band].append({
+                            'week': week_label,
+                            'value': row['y'],
+                            'score': score
+                        })
+            
+            # Calculate statistics for each band
+            band_stats = {}
+            baseline_avg = None
+            
+            for band_label, data_points in band_data.items():
+                if not data_points:
+                    continue
+                
+                values = [d['value'] for d in data_points]
+                avg = np.mean(values)
+                
+                band_stats[band_label] = {
+                    'count': len(data_points),
+                    'total': sum(values),
+                    'average': round(avg, 2),
+                    'min': round(min(values), 2),
+                    'max': round(max(values), 2),
+                    'weeks': [d['week'] for d in data_points]
+                }
+                
+                # Use "No/Low Promo" as baseline
+                if band_label == 'No/Low Promo':
+                    baseline_avg = avg
+            
+            # Calculate uplift factors relative to baseline
+            if baseline_avg and baseline_avg > 0:
+                for band_label in band_stats:
+                    uplift = band_stats[band_label]['average'] / baseline_avg
+                    band_stats[band_label]['uplift_factor'] = round(uplift, 2)
+                    band_stats[band_label]['uplift_pct'] = round((uplift - 1) * 100, 1)
+            
+            result[mp] = {
+                'bands': band_stats,
+                'baseline_avg': round(baseline_avg, 2) if baseline_avg else None,
+                'total_weeks_analyzed': sum(len(b) for b in band_data.values())
+            }
+        
+        return result
+    
+    def get_all_promo_analysis(self):
+        """Get promo analysis for all metrics"""
+        if not self.has_promo_scores:
+            return None
+        
+        result = {}
+        
+        for metric in self.METRICS:
+            analysis = self.calculate_promo_uplift_analysis(metric)
+            if analysis:
+                result[metric] = analysis
+        
+        return result
+    
+    def get_forecast_with_promo_uplift(self, metric, marketplace):
+        """Apply promo uplift factors to forecast values
+        
+        Returns forecast data with uplift applied based on promo scores for future weeks
+        """
+        if not self.has_manual_forecast or not self.has_promo_scores:
+            return None
+        
+        # Get forecast data
+        df = self.get_dataframe(metric, marketplace, is_forecast=True)
+        if df is None or df.empty:
+            return None
+        
+        # Get promo analysis for uplift factors
+        analysis = self.calculate_promo_uplift_analysis(metric)
+        if not analysis or marketplace not in analysis:
+            return None
+        
+        mp_analysis = analysis[marketplace]
+        bands = mp_analysis.get('bands', {})
+        
+        # Build uplift factor map from bands
+        uplift_map = {}
+        for band_label, stats in bands.items():
+            if 'uplift_factor' in stats:
+                uplift_map[band_label] = stats['uplift_factor']
+        
+        # If no uplift factors available, return original data
+        if not uplift_map:
+            return None
+        
+        # Apply uplift to each forecast value
+        uplifted_values = []
+        uplift_details = []
+        
+        for _, row in df.iterrows():
+            week_label = self.format_week_label(row['ds'])
+            original_value = row['y']
+            
+            # Get promo score for this week
+            score = self.get_promo_score_for_week(marketplace, week_label)
+            
+            if score is not None:
+                band = self.get_promo_band(score)
+                uplift_factor = uplift_map.get(band, 1.0)
+                uplifted_value = original_value * uplift_factor
+                
+                uplifted_values.append(uplifted_value)
+                uplift_details.append({
+                    'week': week_label,
+                    'original': original_value,
+                    'uplifted': round(uplifted_value, 2),
+                    'score': score,
+                    'band': band,
+                    'uplift_factor': uplift_factor
+                })
+            else:
+                # No promo score, keep original value
+                uplifted_values.append(original_value)
+                uplift_details.append({
+                    'week': week_label,
+                    'original': original_value,
+                    'uplifted': original_value,
+                    'score': None,
+                    'band': 'No Data',
+                    'uplift_factor': 1.0
+                })
+        
+        return {
+            'dates': df['ds'].dt.strftime('%Y-%m-%d').tolist(),
+            'weeks': [self.format_week_label(d) for d in df['ds']],
+            'original_values': df['y'].tolist(),
+            'uplifted_values': uplifted_values,
+            'details': uplift_details,
+            'uplift_factors': uplift_map
+        }
+    
+    def get_all_forecast_with_uplift(self):
+        """Get uplifted forecast data for all metrics and marketplaces"""
+        if not self.has_manual_forecast or not self.has_promo_scores:
+            return None
+        
+        result = {}
+        
+        for metric in self.METRICS:
+            result[metric] = {}
+            for mp in self.MARKETPLACES:
+                uplift_data = self.get_forecast_with_promo_uplift(metric, mp)
+                if uplift_data:
+                    result[metric][mp] = uplift_data
+        
+        return result
 
 
 def test_processor():

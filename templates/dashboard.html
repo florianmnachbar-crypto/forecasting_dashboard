@@ -89,6 +89,20 @@
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
+                <div class="toggle-group" id="promoOverlayToggleGroup" style="display: none;">
+                    <span class="toggle-label">Promo Overlay</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="promoOverlayToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+                <div class="toggle-group" id="promoUpliftToggleGroup" style="display: none;">
+                    <span class="toggle-label">Promo Uplift FC</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="promoUpliftToggle">
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
             </div>
             
             <div class="sidebar-section">
@@ -132,6 +146,7 @@
                 <div class="stats-toggle">
                     <button class="stats-toggle-btn active" data-view="total">Total</button>
                     <button class="stats-toggle-btn" data-view="t4w">T4W</button>
+                    <button class="stats-toggle-btn" data-view="cw">CW</button>
                 </div>
             </div>
             
@@ -171,6 +186,9 @@
                     </button>
                     <button class="tab-btn" data-tab="historic-deviations">
                         <i class="fas fa-history"></i> Historic Deviations
+                    </button>
+                    <button class="tab-btn" data-tab="promo-analysis" id="promoAnalysisTab" style="display: none;">
+                        <i class="fas fa-tags"></i> Promo Analysis
                     </button>
                 </div>
 
@@ -290,6 +308,11 @@
                         </div>
                     </div>
                     
+                    <!-- Deviation Chart -->
+                    <div class="deviation-chart-container">
+                        <div id="deviationChart" class="deviation-chart"></div>
+                    </div>
+                    
                     <div class="historic-deviations-container">
                         <table class="historic-deviations-table" id="historicDeviationsTable">
                             <thead>
@@ -316,6 +339,41 @@
                         <span class="legend-item"><span class="legend-color green"></span> &lt;20% deviation</span>
                         <span class="legend-item"><span class="legend-color yellow"></span> 20-30% deviation</span>
                         <span class="legend-item"><span class="legend-color red"></span> &gt;30% deviation</span>
+                    </div>
+                </div>
+
+                <!-- Tab Content: Promo Analysis -->
+                <div class="tab-content" id="tab-promo-analysis">
+                    <div class="section-header">
+                        <h2 class="section-title">
+                            <i class="fas fa-tags"></i>
+                            Promo Uplift Analysis
+                        </h2>
+                        <select id="promoMetricSelect" class="deviation-metric-select">
+                            <option value="Net Ordered Units">Net Ordered Units</option>
+                            <option value="Transits">Transits</option>
+                            <option value="Transit Conversion">Transit Conversion</option>
+                            <option value="UPO">UPO</option>
+                        </select>
+                    </div>
+                    
+                    <div class="promo-legend">
+                        <div class="promo-band-legend">
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(76, 175, 80, 0.3);"></span> No/Low Promo (0-1)</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(255, 235, 59, 0.3);"></span> Light Promo (1.1-2)</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(255, 152, 0, 0.3);"></span> Medium Promo (2.1-3)</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(244, 67, 54, 0.3);"></span> Strong Promo (3.1-5)</span>
+                        </div>
+                    </div>
+                    
+                    <div class="promo-analysis-grid" id="promoAnalysisGrid">
+                        <!-- Promo analysis cards populated by JS -->
+                    </div>
+                    
+                    <div class="promo-info-card">
+                        <h4><i class="fas fa-info-circle"></i> How to use Promo Uplift</h4>
+                        <p>The uplift factor shows how much performance increases during promotions compared to baseline (no/low promo weeks). For example, an uplift of 1.5x means 50% increase over baseline.</p>
+                        <p>Use these factors to adjust forecasts when planning promotions.</p>
                     </div>
                 </div>
             </section>

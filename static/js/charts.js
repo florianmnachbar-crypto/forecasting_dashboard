@@ -9,16 +9,30 @@ const state = {
     data: null,
     forecasts: null,
     manualForecast: null,
+    forecastUplift: null,
     accuracy: null,
     statistics: null,
+    promoScores: null,
+    promoAnalysis: null,
     currentMetric: 'Net Ordered Units',
     selectedMarketplaces: ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'],
     model: 'sarimax',
     seasonality: true,
     showManualForecast: true,
+    showPromoOverlay: true,
+    showPromoUplift: false,
     statsView: 'total', // 'total' or 't4w'
     theme: 'dark',
-    hasManualForecast: false
+    hasManualForecast: false,
+    hasPromoScores: false
+};
+
+// Promo band colors (for chart overlays)
+const promoBandColors = {
+    'No/Low Promo': { bg: 'rgba(128, 128, 128, 0.1)', border: 'rgba(128, 128, 128, 0.3)' },
+    'Light Promo': { bg: 'rgba(100, 181, 246, 0.15)', border: 'rgba(100, 181, 246, 0.4)' },
+    'Medium Promo': { bg: 'rgba(255, 193, 7, 0.15)', border: 'rgba(255, 193, 7, 0.4)' },
+    'Strong Promo': { bg: 'rgba(255, 87, 34, 0.2)', border: 'rgba(255, 87, 34, 0.5)' }
 };
 
 // Marketplace colors
@@ -64,6 +78,8 @@ function initializeEventListeners() {
     document.getElementById('modelSelect')?.addEventListener('change', handleModelChange);
     document.getElementById('seasonalityToggle')?.addEventListener('change', handleSeasonalityChange);
     document.getElementById('manualForecastToggle')?.addEventListener('change', handleManualForecastToggle);
+    document.getElementById('promoOverlayToggle')?.addEventListener('change', handlePromoOverlayToggle);
+    document.getElementById('promoUpliftToggle')?.addEventListener('change', handlePromoUpliftToggle);
     document.getElementById('refreshBtn')?.addEventListener('click', refreshDashboard);
     
     // Marketplace checkboxes
@@ -87,6 +103,9 @@ function initializeEventListeners() {
     // Historic deviations selects
     document.getElementById('deviationMetricSelect')?.addEventListener('change', loadHistoricDeviations);
     document.getElementById('deviationMpSelect')?.addEventListener('change', loadHistoricDeviations);
+    
+    // Promo analysis select
+    document.getElementById('promoMetricSelect')?.addEventListener('change', populatePromoAnalysisGrid);
     
     // Export dropdown
     initializeExportDropdown();
@@ -204,6 +223,11 @@ function handleTabChange(e) {
     // Load historic deviations if switching to that tab
     if (tabName === 'historic-deviations') {
         loadHistoricDeviations();
+    }
+    
+    // Load promo analysis if switching to that tab
+    if (tabName === 'promo-analysis') {
+        populatePromoAnalysisGrid();
     }
 }
 
@@ -375,7 +399,7 @@ function applyTheme(theme) {
     }
 }
 
-function handleStatsToggle(e) {
+async function handleStatsToggle(e) {
     const view = e.target.dataset.view;
     state.statsView = view;
     
@@ -384,14 +408,47 @@ function handleStatsToggle(e) {
         btn.classList.toggle('active', btn.dataset.view === view);
     });
     
-    // Update stats display
+    // Re-fetch accuracy with new timeframe if we have manual forecast
+    if (state.hasManualForecast) {
+        await loadAccuracy();
+    }
+    
+    // Update stats display and charts (to update forecast stats)
     if (state.statistics) {
         updateStatistics();
+    }
+    if (state.forecasts) {
+        updateCharts();
+    }
+}
+
+async function loadAccuracy() {
+    try {
+        // Map statsView to API timeframe parameter
+        const timeframe = state.statsView; // 'total', 't4w', or 'cw'
+        const accResponse = await fetch(`/api/accuracy?timeframe=${timeframe}`);
+        const accResult = await accResponse.json();
+        
+        if (accResult.success && accResult.accuracy) {
+            state.accuracy = accResult.accuracy;
+        }
+    } catch (error) {
+        console.error('Error loading accuracy:', error);
     }
 }
 
 function handleManualForecastToggle(e) {
     state.showManualForecast = e.target.checked;
+    updateCharts();
+}
+
+function handlePromoOverlayToggle(e) {
+    state.showPromoOverlay = e.target.checked;
+    updateCharts();
+}
+
+function handlePromoUpliftToggle(e) {
+    state.showPromoUplift = e.target.checked;
     updateCharts();
 }
 
@@ -485,13 +542,11 @@ async function loadData() {
         
         // Load accuracy metrics if manual forecast exists
         if (state.hasManualForecast) {
-            const accResponse = await fetch('/api/accuracy');
-            const accResult = await accResponse.json();
-            
-            if (accResult.success && accResult.accuracy) {
-                state.accuracy = accResult.accuracy;
-            }
+            await loadAccuracy();
         }
+        
+        // Load promo scores if available
+        await loadPromoData();
         
         // Update UI to show/hide manual forecast toggle
         updateManualForecastToggleVisibility();
@@ -501,10 +556,93 @@ async function loadData() {
     }
 }
 
+async function loadPromoData() {
+    try {
+        // Load promo scores
+        const promoResponse = await fetch('/api/promo-scores');
+        const promoResult = await promoResponse.json();
+        
+        if (promoResult.success && promoResult.has_promo_scores) {
+            state.promoScores = promoResult.promo_data;
+            state.hasPromoScores = true;
+            console.log('Promo scores loaded:', Object.keys(state.promoScores.scores || {}));
+        } else {
+            state.hasPromoScores = false;
+        }
+        
+        // Load promo analysis
+        if (state.hasPromoScores) {
+            const analysisResponse = await fetch('/api/promo-analysis');
+            const analysisResult = await analysisResponse.json();
+            
+            if (analysisResult.success && analysisResult.analysis) {
+                state.promoAnalysis = analysisResult.analysis;
+                console.log('Promo analysis loaded for metrics:', Object.keys(state.promoAnalysis));
+            }
+            
+            // Load forecast uplift data
+            const upliftResponse = await fetch('/api/forecast-uplift');
+            const upliftResult = await upliftResponse.json();
+            
+            if (upliftResult.success && upliftResult.has_uplift_data) {
+                state.forecastUplift = upliftResult.uplift_data;
+                console.log('Forecast uplift loaded for metrics:', Object.keys(state.forecastUplift));
+            }
+        }
+    } catch (error) {
+        console.error('Error loading promo data:', error);
+        state.hasPromoScores = false;
+    }
+}
+
+// Get promo band from score
+function getPromoBand(score) {
+    if (score === null || score === undefined) return null;
+    if (score <= 1) return 'No/Low Promo';
+    if (score <= 2) return 'Light Promo';
+    if (score <= 3) return 'Medium Promo';
+    return 'Strong Promo';
+}
+
+// Get promo score for a specific marketplace and week
+function getPromoScoreForWeek(marketplace, weekLabel) {
+    if (!state.hasPromoScores || !state.promoScores?.scores) return null;
+    
+    const mpScores = state.promoScores.scores[marketplace];
+    if (!mpScores) return null;
+    
+    // Try exact match
+    if (mpScores[weekLabel] !== undefined) {
+        return mpScores[weekLabel];
+    }
+    
+    // Try normalized match (convert week format)
+    // weekLabel might be "Wk19 2025" or "Wk01 2026"
+    return null;
+}
+
 function updateManualForecastToggleVisibility() {
     const toggleGroup = document.getElementById('manualForecastToggleGroup');
     if (toggleGroup) {
         toggleGroup.style.display = state.hasManualForecast ? 'flex' : 'none';
+    }
+    
+    // Also update promo overlay toggle visibility
+    const promoToggleGroup = document.getElementById('promoOverlayToggleGroup');
+    if (promoToggleGroup) {
+        promoToggleGroup.style.display = state.hasPromoScores ? 'flex' : 'none';
+    }
+    
+    // Promo uplift toggle visibility - only show when we have both promo scores and manual forecast
+    const promoUpliftToggleGroup = document.getElementById('promoUpliftToggleGroup');
+    if (promoUpliftToggleGroup) {
+        promoUpliftToggleGroup.style.display = (state.hasPromoScores && state.hasManualForecast) ? 'flex' : 'none';
+    }
+    
+    // Show/hide the Promo Analysis tab based on promo data availability
+    const promoAnalysisTab = document.getElementById('promoAnalysisTab');
+    if (promoAnalysisTab) {
+        promoAnalysisTab.style.display = state.hasPromoScores ? 'inline-flex' : 'none';
     }
 }
 
@@ -614,10 +752,25 @@ function updateStatistics() {
         
         const s = stats[mp];
         const isT4W = state.statsView === 't4w';
+        const isCW = state.statsView === 'cw';
         
-        // Calculate T4W stats from the data if available
+        // Calculate stats based on view
         let displayStats;
-        if (isT4W && state.data?.[metric]?.[mp]) {
+        let viewLabel = 'Total';
+        
+        if (isCW && state.data?.[metric]?.[mp]) {
+            // Current Week - just the latest value
+            const values = state.data[metric][mp].values;
+            const latestValue = values[values.length - 1];
+            displayStats = {
+                total: latestValue,
+                average: latestValue,
+                min: latestValue,
+                max: latestValue,
+                count: 1
+            };
+            viewLabel = 'CW';
+        } else if (isT4W && state.data?.[metric]?.[mp]) {
             const values = state.data[metric][mp].values;
             const last4 = values.slice(-4);
             displayStats = {
@@ -627,38 +780,60 @@ function updateStatistics() {
                 max: Math.max(...last4),
                 count: last4.length
             };
+            viewLabel = 'T4W';
         } else {
             displayStats = s;
+            viewLabel = 'Total';
         }
         
-        html += `
-            <div class="stat-card">
-                <div class="stat-card-header">
-                    <h4>
-                        <span class="mp-flag ${mp.toLowerCase()}">${mp}</span>
-                        ${mp === 'EU5' ? 'All Marketplaces' : getMarketplaceName(mp)}
-                    </h4>
-                </div>
-                <div class="stat-card-body">
-                    <div class="stat-item">
-                        <div class="value">${formatNumber(displayStats.total)}</div>
-                        <div class="label">${isT4W ? 'T4W Total' : 'Total'}</div>
+        // For CW, show simplified card
+        if (isCW) {
+            html += `
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <h4>
+                            <span class="mp-flag ${mp.toLowerCase()}">${mp}</span>
+                            ${mp === 'EU5' ? 'All Marketplaces' : getMarketplaceName(mp)}
+                        </h4>
                     </div>
-                    <div class="stat-item">
-                        <div class="value">${formatNumber(displayStats.average)}</div>
-                        <div class="label">${isT4W ? 'T4W Avg' : 'Average'}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="value">${formatNumber(displayStats.min)}</div>
-                        <div class="label">${isT4W ? 'T4W Min' : 'Minimum'}</div>
-                    </div>
-                    <div class="stat-item">
-                        <div class="value">${formatNumber(displayStats.max)}</div>
-                        <div class="label">${isT4W ? 'T4W Max' : 'Maximum'}</div>
+                    <div class="stat-card-body">
+                        <div class="stat-item stat-item-large">
+                            <div class="value">${formatNumber(displayStats.total)}</div>
+                            <div class="label">Current Week Value</div>
+                        </div>
                     </div>
                 </div>
-            </div>
-        `;
+            `;
+        } else {
+            html += `
+                <div class="stat-card">
+                    <div class="stat-card-header">
+                        <h4>
+                            <span class="mp-flag ${mp.toLowerCase()}">${mp}</span>
+                            ${mp === 'EU5' ? 'All Marketplaces' : getMarketplaceName(mp)}
+                        </h4>
+                    </div>
+                    <div class="stat-card-body">
+                        <div class="stat-item">
+                            <div class="value">${formatNumber(displayStats.total)}</div>
+                            <div class="label">${viewLabel} Total</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="value">${formatNumber(displayStats.average)}</div>
+                            <div class="label">${viewLabel} Avg</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="value">${formatNumber(displayStats.min)}</div>
+                            <div class="label">${viewLabel} Min</div>
+                        </div>
+                        <div class="stat-item">
+                            <div class="value">${formatNumber(displayStats.max)}</div>
+                            <div class="label">${viewLabel} Max</div>
+                        </div>
+                    </div>
+                </div>
+            `;
+        }
     });
     
     statsGrid.innerHTML = html;
@@ -750,6 +925,21 @@ function renderChart(marketplace, metric, isModal = false) {
     // Use week labels for x-axis
     const weekLabels = historicalData.weeks || historicalData.dates.map(d => formatDateToWeek(d));
     
+    // Build promo score annotations for tooltips
+    const promoAnnotations = [];
+    if (state.hasPromoScores && state.showPromoOverlay) {
+        weekLabels.forEach((week, idx) => {
+            const score = getPromoScoreForWeek(marketplace, week);
+            if (score !== null) {
+                promoAnnotations.push({
+                    week: week,
+                    score: score,
+                    band: getPromoBand(score)
+                });
+            }
+        });
+    }
+    
     const traces = [];
     
     // Historical data trace
@@ -767,12 +957,22 @@ function renderChart(marketplace, metric, isModal = false) {
     if (manualForecast && state.showManualForecast) {
         const manualWeeks = manualForecast.weeks || manualForecast.dates.map(d => formatDateToWeek(d));
         
+        // Check if we should apply promo uplift
+        const upliftData = state.forecastUplift?.[metric]?.[marketplace];
+        let forecastValues = manualForecast.values;
+        let forecastLabel = 'Manual FC';
+        
+        if (state.showPromoUplift && upliftData) {
+            forecastValues = upliftData.uplifted_values;
+            forecastLabel = 'Manual FC (Uplift)';
+        }
+        
         traces.push({
             x: manualWeeks,
-            y: manualForecast.values,
+            y: forecastValues,
             type: 'scatter',
             mode: 'lines+markers',
-            name: 'Manual FC',
+            name: forecastLabel,
             line: { color: manualForecastColor.line, width: 2, dash: 'dot' },
             marker: { size: isModal ? 6 : 4, symbol: 'square' }
         });
@@ -832,7 +1032,7 @@ function renderChart(marketplace, metric, isModal = false) {
             marker: { size: isModal ? 6 : 4, symbol: 'diamond' }
         });
         
-        // Update forecast stats
+        // Update forecast stats based on statsView
         if (statsContainer) {
             const modelDisplay = forecast.model || 'SARIMAX';
             const isDerived = modelDisplay.includes('Calculated') || (forecast.model_info && forecast.model_info.method === 'derived');
@@ -850,14 +1050,31 @@ function renderChart(marketplace, metric, isModal = false) {
                 `;
             }
             
+            // Calculate values based on stats view
+            let fcValues = forecast.values;
+            let viewLabel = 'Total';
+            
+            if (state.statsView === 'cw') {
+                // Current week - just the first forecast value
+                fcValues = fcValues.slice(0, 1);
+                viewLabel = 'CW';
+            } else if (state.statsView === 't4w') {
+                // Trailing 4 weeks - take first 4 forecast values
+                fcValues = fcValues.slice(0, 4);
+                viewLabel = 'T4W';
+            }
+            
+            const fcTotal = fcValues.reduce((a, b) => a + b, 0);
+            const fcAvg = fcTotal / fcValues.length;
+            
             statsContainer.innerHTML = `
                 <div class="forecast-stat">
-                    <div class="value">${formatNumber(forecast.values.reduce((a, b) => a + b, 0))}</div>
-                    <div class="label">Model FC Total</div>
+                    <div class="value">${formatNumber(fcTotal)}</div>
+                    <div class="label">Model FC ${viewLabel}</div>
                 </div>
                 <div class="forecast-stat">
-                    <div class="value">${formatNumber(forecast.values.reduce((a, b) => a + b, 0) / forecast.values.length)}</div>
-                    <div class="label">Model FC Avg</div>
+                    <div class="value">${formatNumber(fcAvg)}</div>
+                    <div class="label">${viewLabel === 'CW' ? 'CW Value' : viewLabel + ' Avg'}</div>
                 </div>
                 <div class="forecast-stat">
                     <div class="value" title="${isDerived ? 'Net Ordered Units = Transits × Conversion × UPO' : ''}">${modelDisplay}</div>
@@ -880,6 +1097,28 @@ function renderChart(marketplace, metric, isModal = false) {
     if (maxVal >= 10000000) leftMargin = 80;
     else if (maxVal >= 1000000) leftMargin = 75;
     else if (maxVal >= 100000) leftMargin = 70;
+    
+    // Build promo overlay shapes
+    const promoShapes = [];
+    if (state.hasPromoScores && state.showPromoOverlay && promoAnnotations.length > 0) {
+        promoAnnotations.forEach((anno, idx) => {
+            const band = anno.band;
+            if (band && promoBandColors[band]) {
+                promoShapes.push({
+                    type: 'rect',
+                    xref: 'x',
+                    yref: 'paper',
+                    x0: idx - 0.4,
+                    x1: idx + 0.4,
+                    y0: 0,
+                    y1: 1,
+                    fillcolor: promoBandColors[band].bg,
+                    line: { width: 0 },
+                    layer: 'below'
+                });
+            }
+        });
+    }
     
     const layout = {
         paper_bgcolor: 'transparent',
@@ -910,7 +1149,8 @@ function renderChart(marketplace, metric, isModal = false) {
             xanchor: 'center',
             font: { size: isModal ? 12 : 10 }
         },
-        hovermode: 'x unified'
+        hovermode: 'x unified',
+        shapes: promoShapes
     };
     
     const config = {
@@ -921,6 +1161,102 @@ function renderChart(marketplace, metric, isModal = false) {
     };
     
     Plotly.newPlot(container, traces, layout, config);
+}
+
+// Populate promo analysis grid
+function populatePromoAnalysisGrid() {
+    const grid = document.getElementById('promoAnalysisGrid');
+    if (!grid || !state.promoAnalysis) return;
+    
+    const metric = document.getElementById('promoMetricSelect')?.value || 'Net Ordered Units';
+    const analysis = state.promoAnalysis[metric];
+    
+    if (!analysis) {
+        grid.innerHTML = '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available for this metric.</p>';
+        return;
+    }
+    
+    const mpNames = {
+        'UK': 'United Kingdom',
+        'DE': 'Germany', 
+        'FR': 'France',
+        'IT': 'Italy',
+        'ES': 'Spain',
+        'EU5': 'EU5 (All)'
+    };
+    
+    let html = '';
+    const mpOrder = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
+    
+    for (const mp of mpOrder) {
+        if (!analysis[mp]) continue;
+        
+        const mpData = analysis[mp];
+        const bands = mpData.bands || {};
+        
+        html += `
+            <div class="promo-card">
+                <div class="promo-card-header">
+                    <h4>
+                        <div class="mp-flag ${mp.toLowerCase()}">${mp}</div>
+                        ${mpNames[mp]}
+                    </h4>
+                    <span style="color: var(--text-muted); font-size: 0.85rem;">${mpData.total_weeks_analyzed || 0} weeks</span>
+                </div>
+                <table class="promo-band-table">
+                    <thead>
+                        <tr>
+                            <th>Promo Band</th>
+                            <th>Avg</th>
+                            <th>Uplift</th>
+                            <th>Weeks</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+        `;
+        
+        const bandOrder = ['No/Low Promo', 'Light Promo', 'Medium Promo', 'Strong Promo'];
+        const bandClasses = {
+            'No/Low Promo': 'no-promo',
+            'Light Promo': 'light-promo',
+            'Medium Promo': 'medium-promo',
+            'Strong Promo': 'strong-promo'
+        };
+        
+        for (const bandLabel of bandOrder) {
+            const band = bands[bandLabel];
+            if (!band) continue;
+            
+            const upliftPct = band.uplift_pct || 0;
+            const upliftClass = upliftPct > 5 ? 'uplift-positive' : (upliftPct < -5 ? 'uplift-negative' : 'uplift-neutral');
+            const upliftSign = upliftPct > 0 ? '+' : '';
+            
+            html += `
+                <tr>
+                    <td>
+                        <span class="promo-band-name">
+                            <span class="promo-band-dot ${bandClasses[bandLabel]}"></span>
+                            ${bandLabel}
+                        </span>
+                    </td>
+                    <td>${formatNumber(band.average)}</td>
+                    <td class="uplift-value ${upliftClass}">${band.uplift_factor ? band.uplift_factor.toFixed(2) + 'x' : '1.00x'} (${upliftSign}${upliftPct.toFixed(0)}%)</td>
+                    <td>${band.count}</td>
+                </tr>
+            `;
+        }
+        
+        html += `
+                    </tbody>
+                </table>
+                <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
+                    Baseline: ${formatNumber(mpData.baseline_avg)} avg
+                </div>
+            </div>
+        `;
+    }
+    
+    grid.innerHTML = html || '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available.</p>';
 }
 
 function formatDateToWeek(dateStr) {
@@ -1098,7 +1434,13 @@ function renderHistoricDeviationsTable(deviations, summary, metric) {
     
     if (!tableBody) return;
     
-    // Sort deviations by date descending (most recent first)
+    // Sort deviations by date ascending for chart (oldest first)
+    const sortedForChart = [...deviations].sort((a, b) => new Date(a.date) - new Date(b.date));
+    
+    // Render the deviation chart
+    renderDeviationChart(sortedForChart, metric);
+    
+    // Sort deviations by date descending for table (most recent first)
     const sortedDeviations = [...deviations].sort((a, b) => new Date(b.date) - new Date(a.date));
     
     let html = '';
@@ -1182,4 +1524,148 @@ function getDeviationSummaryClass(avgDev) {
     if (avgDev < 20) return 'summary-good';
     if (avgDev < 30) return 'summary-warn';
     return 'summary-bad';
+}
+
+function renderDeviationChart(deviations, metric) {
+    const container = document.getElementById('deviationChart');
+    if (!container || !deviations || deviations.length === 0) {
+        if (container) {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-muted); padding: 2rem;">No deviation data available for chart</p>';
+        }
+        return;
+    }
+    
+    const isDark = state.theme === 'dark';
+    const mpSelect = document.getElementById('deviationMpSelect');
+    const marketplace = mpSelect?.value || 'EU5';
+    const colors = mpColors[marketplace] || mpColors['EU5'];
+    
+    // Prepare data arrays
+    const weeks = deviations.map(d => d.week);
+    const actuals = deviations.map(d => d.actual);
+    const manualForecasts = deviations.map(d => d.manual_forecast);
+    const modelForecasts = deviations.map(d => d.model_forecast);
+    const manualDevs = deviations.map(d => d.manual_dev_pct);
+    const modelDevs = deviations.map(d => d.model_dev_pct);
+    
+    const traces = [];
+    
+    // Actual values trace
+    traces.push({
+        x: weeks,
+        y: actuals,
+        type: 'scatter',
+        mode: 'lines+markers',
+        name: 'Actual',
+        line: { color: colors.line, width: 2 },
+        marker: { size: 6 },
+        yaxis: 'y'
+    });
+    
+    // Manual forecast trace (if exists)
+    const hasManualFC = manualForecasts.some(v => v !== null);
+    if (hasManualFC) {
+        traces.push({
+            x: weeks,
+            y: manualForecasts,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Manual FC',
+            line: { color: manualForecastColor.line, width: 2, dash: 'dot' },
+            marker: { size: 6, symbol: 'square' },
+            yaxis: 'y'
+        });
+    }
+    
+    // Model forecast trace (if exists)
+    const hasModelFC = modelForecasts.some(v => v !== null);
+    if (hasModelFC) {
+        traces.push({
+            x: weeks,
+            y: modelForecasts,
+            type: 'scatter',
+            mode: 'lines+markers',
+            name: 'Model FC',
+            line: { color: '#00bcd4', width: 2, dash: 'dash' },
+            marker: { size: 6, symbol: 'diamond' },
+            yaxis: 'y'
+        });
+    }
+    
+    // Deviation bars (manual) on secondary axis
+    if (hasManualFC) {
+        // Color bars based on deviation threshold
+        const manualBarColors = manualDevs.map(d => {
+            if (d === null) return 'rgba(128,128,128,0.3)';
+            const abs = Math.abs(d);
+            if (abs < 20) return 'rgba(0, 230, 118, 0.7)';  // green
+            if (abs < 30) return 'rgba(255, 193, 7, 0.7)';  // yellow
+            return 'rgba(244, 67, 54, 0.7)';  // red
+        });
+        
+        traces.push({
+            x: weeks,
+            y: manualDevs,
+            type: 'bar',
+            name: 'Manual Dev %',
+            marker: { color: manualBarColors },
+            yaxis: 'y2',
+            opacity: 0.7
+        });
+    }
+    
+    const layout = {
+        paper_bgcolor: 'transparent',
+        plot_bgcolor: 'transparent',
+        font: { 
+            color: isDark ? 'rgba(255,255,255,0.7)' : 'rgba(26,26,46,0.8)',
+            family: 'Inter, sans-serif',
+            size: 11
+        },
+        margin: { l: 70, r: 70, t: 30, b: 70 },
+        xaxis: {
+            gridcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+            tickangle: -45,
+            tickfont: { size: 10 }
+        },
+        yaxis: {
+            title: metric,
+            titlefont: { size: 11 },
+            gridcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
+            tickformat: metric === 'Transit Conversion' ? '.2%' : '.2s',
+            tickfont: { size: 10 },
+            side: 'left'
+        },
+        yaxis2: {
+            title: 'Deviation %',
+            titlefont: { size: 11 },
+            overlaying: 'y',
+            side: 'right',
+            tickformat: '+.0f',
+            ticksuffix: '%',
+            tickfont: { size: 10 },
+            gridcolor: 'transparent',
+            zeroline: true,
+            zerolinecolor: isDark ? 'rgba(255,255,255,0.3)' : 'rgba(0,0,0,0.3)',
+            zerolinewidth: 1
+        },
+        legend: {
+            orientation: 'h',
+            y: -0.2,
+            x: 0.5,
+            xanchor: 'center',
+            font: { size: 11 }
+        },
+        hovermode: 'x unified',
+        barmode: 'group',
+        bargap: 0.3
+    };
+    
+    const config = {
+        responsive: true,
+        displayModeBar: false,
+        displaylogo: false
+    };
+    
+    Plotly.newPlot(container, traces, layout, config);
 }

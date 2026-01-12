@@ -1548,3 +1548,139 @@ input:checked + .toggle-slider::before {
 .summary-card.summary-bad .summary-value {
     color: #f44336;
 }
+
+/* Promo Analysis Styles */
+.promo-legend {
+    margin-bottom: 1.5rem;
+}
+
+.promo-band-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--bg-glass);
+    border-radius: 8px;
+}
+
+.promo-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.promo-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.promo-card:hover {
+    box-shadow: var(--shadow);
+    border-color: var(--accent);
+}
+
+.promo-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-card-header h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.1rem;
+}
+
+.promo-band-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.promo-band-table th {
+    text-align: left;
+    padding: 0.5rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-band-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-band-table tr:last-child td {
+    border-bottom: none;
+}
+
+.promo-band-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.promo-band-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.promo-band-dot.no-promo { background: rgba(76, 175, 80, 0.6); }
+.promo-band-dot.light-promo { background: rgba(255, 235, 59, 0.6); }
+.promo-band-dot.medium-promo { background: rgba(255, 152, 0, 0.6); }
+.promo-band-dot.strong-promo { background: rgba(244, 67, 54, 0.6); }
+
+.uplift-value {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.uplift-positive {
+    color: #00e676;
+}
+
+.uplift-negative {
+    color: #f44336;
+}
+
+.uplift-neutral {
+    color: var(--text-secondary);
+}
+
+.promo-info-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.promo-info-card h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--accent);
+}
+
+.promo-info-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.promo-info-card p:last-child {
+    margin-bottom: 0;
+}
