@@ -35,13 +35,15 @@ class Forecaster:
         
         return df
     
-    def forecast_sarimax(self, df, use_seasonality=True):
+    def forecast_sarimax(self, df, use_seasonality=True, exog=None, future_exog=None):
         """
         Generate forecast using SARIMAX model
         
         Parameters:
         - df: DataFrame with 'ds' (dates) and 'y' (values) columns
         - use_seasonality: If True, uses seasonal component (SARIMAX), else ARIMAX
+        - exog: DataFrame with exogenous variables for historical data (e.g., promo_score)
+        - future_exog: DataFrame with exogenous variables for forecast period
         
         Returns:
         - Dictionary with forecast dates, values, and confidence intervals
@@ -64,6 +66,33 @@ class Forecaster:
             if len(y) < 4:
                 return None
             
+            # Process exogenous variables if provided
+            exog_aligned = None
+            has_exog = False
+            
+            if exog is not None and len(exog) > 0:
+                # Align exog with y index
+                try:
+                    exog_df = exog.copy()
+                    if 'ds' in exog_df.columns:
+                        exog_df = exog_df.set_index('ds')
+                        exog_df.index = pd.DatetimeIndex(exog_df.index).to_period('W').to_timestamp()
+                    
+                    # Get only columns that are numeric (exclude date columns)
+                    numeric_cols = exog_df.select_dtypes(include=[np.number]).columns.tolist()
+                    if numeric_cols:
+                        exog_aligned = exog_df[numeric_cols].reindex(y.index)
+                        # Fill NaN with column mean
+                        exog_aligned = exog_aligned.fillna(exog_aligned.mean())
+                        # Drop any rows that are still NaN
+                        valid_mask = ~exog_aligned.isna().any(axis=1) & ~y.isna()
+                        y = y[valid_mask]
+                        exog_aligned = exog_aligned[valid_mask]
+                        has_exog = len(exog_aligned) == len(y) and len(numeric_cols) > 0
+                except Exception as e:
+                    print(f"Exog alignment warning: {e}")
+                    has_exog = False
+            
             # Define SARIMAX parameters
             if use_seasonality and len(y) >= 8:
                 # Seasonal ARIMA with weekly seasonality (period=4 for monthly pattern)
@@ -77,6 +106,7 @@ class Forecaster:
             # Fit the model
             model = SARIMAX(
                 y,
+                exog=exog_aligned if has_exog else None,
                 order=order,
                 seasonal_order=seasonal_order,
                 enforce_stationarity=False,
@@ -86,7 +116,31 @@ class Forecaster:
             fitted_model = model.fit(disp=False, maxiter=200)
             
             # Generate forecast
-            forecast_result = fitted_model.get_forecast(steps=self.forecast_horizon)
+            # Prepare future exogenous variables if needed
+            forecast_exog = None
+            if has_exog and future_exog is not None:
+                try:
+                    if 'ds' in future_exog.columns:
+                        future_exog_df = future_exog.drop(columns=['ds'], errors='ignore')
+                    else:
+                        future_exog_df = future_exog.copy()
+                    
+                    # Ensure same columns as training exog
+                    numeric_cols = exog_aligned.columns.tolist()
+                    forecast_exog = future_exog_df[numeric_cols].iloc[:self.forecast_horizon]
+                    
+                    # Fill NaN with mean from training
+                    for col in numeric_cols:
+                        if forecast_exog[col].isna().any():
+                            forecast_exog[col] = forecast_exog[col].fillna(exog_aligned[col].mean())
+                except Exception as e:
+                    print(f"Future exog warning: {e}")
+                    forecast_exog = None
+            
+            forecast_result = fitted_model.get_forecast(
+                steps=self.forecast_horizon,
+                exog=forecast_exog if has_exog and forecast_exog is not None else None
+            )
             forecast_mean = forecast_result.predicted_mean
             conf_int = forecast_result.conf_int(alpha=0.15)  # 85% confidence interval
             
@@ -108,7 +162,9 @@ class Forecaster:
                 'model_info': {
                     'order': order,
                     'seasonal_order': seasonal_order if use_seasonality else None,
-                    'aic': round(fitted_model.aic, 2) if hasattr(fitted_model, 'aic') else None
+                    'aic': round(fitted_model.aic, 2) if hasattr(fitted_model, 'aic') else None,
+                    'has_exog': has_exog,
+                    'exog_columns': list(exog_aligned.columns) if has_exog else None
                 }
             }
             
