@@ -1,7 +1,6 @@
 /**
- * Amazon Haul EU5 Forecasting Dashboard - Charts v2.0.0
+ * Amazon Haul EU5 Forecasting Dashboard - Charts v2.3.0
  * Handles data visualization, theme switching, and user interactions
- * v2.0.0 - Added manual forecast support with toggle and accuracy metrics
  */
 
 // Global state
