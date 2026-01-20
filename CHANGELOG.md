@@ -5,6 +5,18 @@ All notable changes to the Amazon Haul EU5 Forecasting Dashboard will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.1] - 2026-01-20
+
+### Added
+- **Transits Cap**: `min(EU5_historical_max, MP_historical_max × 3)` - prevents any marketplace from forecasting more transits than EU5 ever had, or more than 3× their own historical max
+- **UPO Cap**: `MP_historical_max × 2` - prevents unrealistic extrapolations for units per order
+
+### Fixed
+- ES Transits forecast explosion (was predicting 740M vs 2M historical max)
+- Model shows "(Capped)" suffix when caps are applied
+
+---
+
 ## [2.3.0] - 2026-01-20
 
 ### Added

@@ -17,7 +17,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "2.3.0"
+APP_VERSION = "2.3.1"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -394,6 +394,125 @@ def _prepare_promo_exog(data_processor, metric, marketplace, df, forecast_horizo
 # Maximum Transit Conversion rate cap (10%)
 MAX_TRANSIT_CONVERSION = 0.10
 
+# UPO cap multiplier (MP historical max × 2)
+UPO_CAP_MULTIPLIER = 2.0
+
+# Transits cap multiplier (MP historical max × 3)
+TRANSITS_CAP_MULTIPLIER = 3.0
+
+
+def _get_historical_max(data_processor, metric, marketplace):
+    """Get historical maximum value for a metric and marketplace"""
+    try:
+        df = data_processor.get_dataframe(metric, marketplace)
+        if df is not None and not df.empty:
+            return df['y'].max()
+    except Exception:
+        pass
+    return None
+
+
+def _cap_transits(forecast, mp_historical_max, eu5_historical_max):
+    """Cap Transits forecasts to prevent unrealistic extrapolations
+    
+    Cap = min(EU5_historical_max, MP_historical_max × 3)
+    
+    This ensures:
+    - No marketplace can forecast more transits than EU5 ever had
+    - No marketplace can forecast more than 3× their own historical max
+    """
+    if forecast is None:
+        return forecast
+    
+    if mp_historical_max is None and eu5_historical_max is None:
+        return forecast  # No historical data to cap against
+    
+    # Calculate cap: min of EU5 max and MP max × 3
+    caps = []
+    if eu5_historical_max is not None:
+        caps.append(eu5_historical_max)
+    if mp_historical_max is not None:
+        caps.append(mp_historical_max * TRANSITS_CAP_MULTIPLIER)
+    
+    transits_cap = min(caps) if caps else None
+    
+    if transits_cap is None:
+        return forecast
+    
+    capped_count = 0
+    
+    # Cap values
+    capped_values = []
+    for v in forecast['values']:
+        if v > transits_cap:
+            capped_values.append(transits_cap)
+            capped_count += 1
+        else:
+            capped_values.append(v)
+    forecast['values'] = capped_values
+    
+    # Cap confidence intervals
+    forecast['lower_bound'] = [min(v, transits_cap) for v in forecast['lower_bound']]
+    forecast['upper_bound'] = [min(v, transits_cap) for v in forecast['upper_bound']]
+    
+    # Add cap info to model_info
+    if 'model_info' not in forecast:
+        forecast['model_info'] = {}
+    if capped_count > 0:
+        forecast['model_info']['transits_capped'] = True
+        forecast['model_info']['transits_capped_weeks'] = capped_count
+        forecast['model_info']['transits_cap_value'] = transits_cap
+        # Update model name
+        current_model = forecast.get('model', 'SARIMAX')
+        if '(Capped)' not in current_model:
+            forecast['model'] = current_model + ' (Capped)'
+    
+    return forecast
+
+
+def _cap_upo(forecast, mp_historical_max):
+    """Cap UPO forecasts to prevent unrealistic extrapolations
+    
+    Cap = MP_historical_max × 2
+    """
+    if forecast is None:
+        return forecast
+    
+    if mp_historical_max is None:
+        return forecast  # No historical data to cap against
+    
+    upo_cap = mp_historical_max * UPO_CAP_MULTIPLIER
+    
+    capped_count = 0
+    
+    # Cap values
+    capped_values = []
+    for v in forecast['values']:
+        if v > upo_cap:
+            capped_values.append(upo_cap)
+            capped_count += 1
+        else:
+            capped_values.append(v)
+    forecast['values'] = capped_values
+    
+    # Cap confidence intervals
+    forecast['lower_bound'] = [min(v, upo_cap) for v in forecast['lower_bound']]
+    forecast['upper_bound'] = [min(v, upo_cap) for v in forecast['upper_bound']]
+    
+    # Add cap info to model_info
+    if 'model_info' not in forecast:
+        forecast['model_info'] = {}
+    if capped_count > 0:
+        forecast['model_info']['upo_capped'] = True
+        forecast['model_info']['upo_capped_weeks'] = capped_count
+        forecast['model_info']['upo_cap_value'] = upo_cap
+        # Update model name
+        current_model = forecast.get('model', 'SARIMAX')
+        if '(Capped)' not in current_model:
+            forecast['model'] = current_model + ' (Capped)'
+    
+    return forecast
+
 
 def _cap_transit_conversion(forecast):
     """Cap Transit Conversion forecasts at a maximum of 10% (0.10)
@@ -535,6 +654,9 @@ def generate_all_forecasts():
         # Driver metrics that are forecasted independently
         driver_metrics = ['Transits', 'Transit Conversion', 'UPO']
         
+        # Pre-calculate EU5 historical max for Transits (used for all MP caps)
+        eu5_transits_max = _get_historical_max(data_processor, 'Transits', 'EU5')
+        
         # First, forecast the driver metrics
         for metric in driver_metrics:
             forecasts[metric] = {}
@@ -579,9 +701,15 @@ def generate_all_forecasts():
                         )
                     
                     if forecast:
-                        # Apply Transit Conversion cap (max 10%)
+                        # Apply caps to prevent unrealistic extrapolations
                         if metric == 'Transit Conversion':
                             forecast = _cap_transit_conversion(forecast)
+                        elif metric == 'Transits':
+                            mp_transits_max = _get_historical_max(data_processor, 'Transits', mp)
+                            forecast = _cap_transits(forecast, mp_transits_max, eu5_transits_max)
+                        elif metric == 'UPO':
+                            mp_upo_max = _get_historical_max(data_processor, 'UPO', mp)
+                            forecast = _cap_upo(forecast, mp_upo_max)
                         
                         if promo_info:
                             forecast['promo_info'] = promo_info
