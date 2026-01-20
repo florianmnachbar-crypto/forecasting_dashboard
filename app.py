@@ -391,6 +391,49 @@ def _prepare_promo_exog(data_processor, metric, marketplace, df, forecast_horizo
         return None, None, None
 
 
+# Maximum Transit Conversion rate cap (10%)
+MAX_TRANSIT_CONVERSION = 0.10
+
+
+def _cap_transit_conversion(forecast):
+    """Cap Transit Conversion forecasts at a maximum of 10% (0.10)
+    
+    This prevents unrealistic forecasts when the model extrapolates from
+    recent spikes in conversion rates.
+    """
+    if forecast is None:
+        return forecast
+    
+    capped_count = 0
+    
+    # Cap values
+    capped_values = []
+    for v in forecast['values']:
+        if v > MAX_TRANSIT_CONVERSION:
+            capped_values.append(MAX_TRANSIT_CONVERSION)
+            capped_count += 1
+        else:
+            capped_values.append(v)
+    forecast['values'] = capped_values
+    
+    # Cap lower bound
+    forecast['lower_bound'] = [min(v, MAX_TRANSIT_CONVERSION) for v in forecast['lower_bound']]
+    
+    # Cap upper bound
+    forecast['upper_bound'] = [min(v, MAX_TRANSIT_CONVERSION) for v in forecast['upper_bound']]
+    
+    # Add cap info to model_info
+    if 'model_info' not in forecast:
+        forecast['model_info'] = {}
+    if capped_count > 0:
+        forecast['model_info']['conversion_capped'] = True
+        forecast['model_info']['conversion_capped_weeks'] = capped_count
+        forecast['model_info']['max_conversion'] = MAX_TRANSIT_CONVERSION
+        forecast['model'] = forecast.get('model', 'SARIMAX') + ' (Capped)'
+    
+    return forecast
+
+
 def _apply_promo_floor(promo_forecast, baseline_forecast, future_scores):
     """Apply floor logic: promo score > 1 cannot decrease forecast below baseline
     
@@ -536,6 +579,10 @@ def generate_all_forecasts():
                         )
                     
                     if forecast:
+                        # Apply Transit Conversion cap (max 10%)
+                        if metric == 'Transit Conversion':
+                            forecast = _cap_transit_conversion(forecast)
+                        
                         if promo_info:
                             forecast['promo_info'] = promo_info
                         forecasts[metric][mp] = forecast

@@ -1081,14 +1081,17 @@ function renderChart(marketplace, metric, isModal = false) {
         }
     }
     
-    // Calculate dynamic left margin based on max value
-    const allValues = [
-        ...historicalData.values, 
-        ...(forecast?.values || []), 
-        ...(forecast?.upper_bound || []),
-        ...(manualForecast?.values || [])
+    // Calculate Y-axis range based on historical + manual forecast ONLY
+    // This ensures the chart is readable even if model forecast explodes
+    const scaleValues = [
+        ...historicalData.values.filter(v => v != null && !isNaN(v)),
+        ...(manualForecast?.values?.filter(v => v != null && !isNaN(v)) || [])
     ];
-    const maxVal = Math.max(...allValues);
+    const yMax = scaleValues.length > 0 ? Math.max(...scaleValues) * 1.15 : 100; // 15% padding
+    const yMin = 0; // Start from 0
+    
+    // Calculate dynamic left margin based on max value (use scale values, not model forecast)
+    const maxVal = yMax;
     let leftMargin = 60; // Default
     if (maxVal >= 10000000) leftMargin = 80;
     else if (maxVal >= 1000000) leftMargin = 75;
@@ -1136,7 +1139,9 @@ function renderChart(marketplace, metric, isModal = false) {
             gridcolor: isDark ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)',
             tickformat: metric === 'Transit Conversion' ? '.2%' : '.2s',
             tickfont: { size: isModal ? 11 : 9 },
-            automargin: true
+            automargin: true,
+            range: [yMin, yMax],  // Fixed range based on historical + manual FC only
+            autorange: false      // Disable autorange so model FC doesn't expand the scale
         },
         legend: {
             orientation: 'h',
