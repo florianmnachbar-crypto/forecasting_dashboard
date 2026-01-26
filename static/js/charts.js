@@ -1,5 +1,5 @@
 /**
- * Amazon Haul EU5 Forecasting Dashboard - Charts v2.3.0
+ * Amazon Haul EU5 Forecasting Dashboard - Charts v2.3.2
  * Handles data visualization, theme switching, and user interactions
  */
 
@@ -705,18 +705,19 @@ function updateAccuracyPanel() {
         if (!accuracy[mp]) return;
         
         const acc = accuracy[mp];
-        const accuracyClass = acc.accuracy >= 80 ? 'good' : acc.accuracy >= 60 ? 'medium' : 'poor';
+        // WAPE: lower is better - green < 20%, yellow 20-30%, red > 30%
+        const wapeClass = acc.wmape < 20 ? 'good' : acc.wmape <= 30 ? 'medium' : 'poor';
         const biasClass = acc.bias > 0 ? 'over' : 'under';
         
         html += `
             <div class="accuracy-card">
                 <div class="accuracy-header">
                     <span class="mp-flag ${mp.toLowerCase()}">${mp}</span>
-                    <span class="accuracy-value ${accuracyClass}">${acc.accuracy}%</span>
+                    <span class="accuracy-value ${wapeClass}">${acc.wmape}%</span>
                 </div>
                 <div class="accuracy-details">
                     <div class="accuracy-item">
-                        <span class="label">WMAPE</span>
+                        <span class="label">WAPE</span>
                         <span class="value">${acc.wmape}%</span>
                     </div>
                     <div class="accuracy-item">
@@ -1032,15 +1033,16 @@ function renderChart(marketplace, metric, isModal = false) {
             }
             const isDerived = modelDisplay.includes('Calculated') || (forecast.model_info && forecast.model_info.method === 'derived');
             
-            // Calculate accuracy info if available
+            // Calculate WAPE info if available (lower is better for error metric)
             const accuracy = state.accuracy?.[metric]?.[marketplace];
             let accuracyHtml = '';
             if (accuracy && state.hasManualForecast) {
-                const accClass = accuracy.accuracy >= 80 ? 'good' : accuracy.accuracy >= 60 ? 'medium' : 'poor';
+                // WAPE: lower is better - green < 20%, yellow 20-30%, red > 30%
+                const wapeClass = accuracy.wmape < 20 ? 'good' : accuracy.wmape <= 30 ? 'medium' : 'poor';
                 accuracyHtml = `
                     <div class="forecast-stat">
-                        <div class="value accuracy-badge ${accClass}">${accuracy.accuracy}%</div>
-                        <div class="label">Manual FC Acc</div>
+                        <div class="value accuracy-badge ${wapeClass}">${accuracy.wmape}%</div>
+                        <div class="label">WAPE</div>
                     </div>
                 `;
             }

@@ -5,6 +5,15 @@ All notable changes to the Amazon Haul EU5 Forecasting Dashboard will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.3.2] - 2026-01-26
+
+### Changed
+- **Accuracy → WAPE**: Changed main error metric display from "Accuracy %" to "WAPE %" (Weighted Average Percentage Error)
+- Inverted color coding for error metric: green < 20%, yellow 20-30%, red > 30% (lower is better)
+- Updated labels: "Manual FC Acc" → "WAPE" in chart footers
+
+---
+
 ## [2.3.1] - 2026-01-20
 
 ### Added

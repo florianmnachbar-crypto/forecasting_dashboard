@@ -17,7 +17,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "2.3.1"
+APP_VERSION = "2.3.2"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
