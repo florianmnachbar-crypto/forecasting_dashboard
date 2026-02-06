@@ -738,6 +738,7 @@ input:checked + .toggle-slider::before {
 .chart-container {
     height: 350px;
     position: relative;
+    overflow: hidden;
 }
 
 .forecast-stats {

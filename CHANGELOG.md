@@ -5,6 +5,19 @@ All notable changes to the Amazon Haul EU5 Forecasting Dashboard will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-02-06
+
+### Added
+- **Direct NOU Forecasting Fallback**: When driver metrics (Transits, Transit Conversion, UPO) are unavailable, the dashboard now forecasts Net Ordered Units directly via SARIMAX instead of failing
+- Model label shows "(Direct)" suffix when direct forecasting is used
+- Model info includes which driver metrics are missing
+
+### Changed
+- NOU-only input files now work correctly - only Net Ordered Units needs to be populated
+- Other metrics (Transits, Transit Conversion, UPO) are optional
+
+---
+
 ## [2.3.2] - 2026-01-26
 
 ### Changed

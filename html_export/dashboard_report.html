@@ -1,0 +1,2495 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Amazon Haul EU5 Forecasting Dashboard - Static Report</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+    <style>
+/* Amazon Haul EU5 Forecasting Dashboard - Styles v1.3.0 */
+
+/* CSS Variables for Theming */
+:root {
+    /* Dark Mode (default) */
+    --bg-primary: #0a0a1a;
+    --bg-secondary: #1a1a2e;
+    --bg-card: rgba(26, 26, 46, 0.8);
+    --bg-glass: rgba(255, 255, 255, 0.05);
+    --text-primary: #ffffff;
+    --text-secondary: rgba(255, 255, 255, 0.7);
+    --text-muted: rgba(255, 255, 255, 0.4);
+    --border-color: rgba(255, 255, 255, 0.1);
+    --accent: #ff9900;
+    --accent-hover: #ffad33;
+    --success: #00e676;
+    --error: #ff5252;
+    --warning: #ffeb3b;
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+    --input-bg: rgba(255, 255, 255, 0.1);
+    --chart-grid: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="light"] {
+    --bg-primary: #f5f5f5;
+    --bg-secondary: #ffffff;
+    --bg-card: rgba(255, 255, 255, 0.95);
+    --bg-glass: rgba(0, 0, 0, 0.03);
+    --text-primary: #1a1a2e;
+    --text-secondary: rgba(26, 26, 46, 0.8);
+    --text-muted: rgba(26, 26, 46, 0.5);
+    --border-color: rgba(0, 0, 0, 0.1);
+    --shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    --input-bg: rgba(0, 0, 0, 0.05);
+    --chart-grid: rgba(0, 0, 0, 0.1);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg-primary);
+    color: var(--text-primary);
+    min-height: 100vh;
+    overflow-x: hidden;
+    transition: background 0.3s ease, color 0.3s ease;
+}
+
+/* Background Animation */
+.bg-animation {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: -1;
+    background: linear-gradient(135deg, var(--bg-primary) 0%, var(--bg-secondary) 100%);
+}
+
+.bg-animation::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, var(--accent) 0%, transparent 50%);
+    opacity: 0.03;
+    animation: pulse 15s ease-in-out infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.1); }
+}
+
+/* Header */
+.header {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border-bottom: 1px solid var(--border-color);
+    padding: 0.75rem 2rem;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    transition: background 0.3s ease;
+}
+
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    max-width: 1800px;
+    margin: 0 auto;
+}
+
+.logo {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.logo-icon {
+    width: 40px;
+    height: 40px;
+    background: linear-gradient(135deg, var(--accent), #ff6b00);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+}
+
+.logo h1 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: var(--text-primary);
+}
+
+.logo span {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    display: block;
+}
+
+.header-actions {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+/* Theme Toggle */
+.theme-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-glass);
+    border-radius: 25px;
+    border: 1px solid var(--border-color);
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.theme-toggle:hover {
+    border-color: var(--accent);
+}
+
+.theme-toggle i {
+    color: var(--text-secondary);
+    font-size: 1rem;
+}
+
+.theme-toggle i.active {
+    color: var(--accent);
+}
+
+.theme-switch {
+    width: 40px;
+    height: 20px;
+    background: var(--input-bg);
+    border-radius: 10px;
+    position: relative;
+    transition: background 0.3s ease;
+}
+
+.theme-switch::after {
+    content: '';
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: var(--accent);
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: transform 0.3s ease;
+}
+
+[data-theme="light"] .theme-switch::after {
+    transform: translateX(20px);
+}
+
+/* File Status */
+.file-status {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: var(--bg-glass);
+    border-radius: 25px;
+    border: 1px solid var(--border-color);
+}
+
+.file-status.no-file {
+    color: var(--text-tertiary);
+}
+
+.file-status.loaded {
+    color: var(--success);
+}
+
+/* Export Dropdown */
+.export-dropdown {
+    position: relative;
+}
+
+.export-dropdown .btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.export-dropdown .fa-chevron-down {
+    font-size: 0.7rem;
+    transition: transform var(--transition-fast);
+}
+
+.export-dropdown.open .fa-chevron-down {
+    transform: rotate(180deg);
+}
+
+.export-menu {
+    position: absolute;
+    top: 100%;
+    right: 0;
+    margin-top: 0.5rem;
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    opacity: 0;
+    visibility: hidden;
+    transform: translateY(-10px);
+    transition: all var(--transition-fast);
+    z-index: 100;
+    min-width: 180px;
+    overflow: hidden;
+}
+
+.export-dropdown.open .export-menu {
+    opacity: 1;
+    visibility: visible;
+    transform: translateY(0);
+}
+
+.export-option {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    width: 100%;
+    padding: 0.75rem 1rem;
+    background: none;
+    border: none;
+    color: var(--text-primary);
+    font-size: 0.9rem;
+    cursor: pointer;
+    transition: background-color var(--transition-fast);
+}
+
+.export-option:hover {
+    background: var(--bg-secondary);
+}
+
+.export-option:first-child {
+    border-bottom: 1px solid var(--border-color);
+}
+
+.export-option i {
+    font-size: 1.1rem;
+    width: 20px;
+    text-align: center;
+}
+
+.export-option[data-format="csv"] i {
+    color: #10b981;
+}
+
+.export-option[data-format="excel"] i {
+    color: #22c55e;
+}
+
+.btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
+
+.btn:disabled:hover {
+    background: var(--bg-secondary);
+    transform: none;
+}
+
+.file-status.no-file i {
+    color: var(--text-muted);
+}
+
+/* Buttons */
+.btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    border-radius: 8px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.btn-primary {
+    background: linear-gradient(135deg, var(--accent), #ff6b00);
+    color: white;
+}
+
+.btn-primary:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px rgba(255, 153, 0, 0.3);
+}
+
+.btn-primary:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.btn-secondary {
+    background: var(--bg-glass);
+    color: var(--text-primary);
+    border: 1px solid var(--border-color);
+}
+
+.btn-secondary:hover {
+    border-color: var(--accent);
+    background: rgba(255, 153, 0, 0.1);
+}
+
+/* Main Layout */
+.main-container {
+    display: flex;
+    min-height: calc(100vh - 60px);
+}
+
+/* Sidebar */
+.sidebar {
+    width: 260px;
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border-right: 1px solid var(--border-color);
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    transition: background 0.3s ease;
+}
+
+.sidebar-section h3 {
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Form Controls */
+.form-group {
+    margin-bottom: 1rem;
+}
+
+.form-group label {
+    display: block;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.5rem;
+}
+
+select, input[type="text"] {
+    width: 100%;
+    padding: 0.75rem;
+    background: var(--input-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.875rem;
+    transition: all 0.3s ease;
+}
+
+select:focus, input[type="text"]:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.1);
+}
+
+/* Toggle Switch */
+.toggle-group {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem;
+    background: var(--bg-glass);
+    border-radius: 8px;
+    margin-bottom: 0.75rem;
+}
+
+.toggle-label {
+    font-size: 0.875rem;
+    color: var(--text-secondary);
+}
+
+.toggle-switch {
+    position: relative;
+    width: 48px;
+    height: 24px;
+}
+
+.toggle-switch input {
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+.toggle-slider {
+    position: absolute;
+    cursor: pointer;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: var(--border-color);
+    border-radius: 24px;
+    transition: 0.3s;
+}
+
+.toggle-slider::before {
+    position: absolute;
+    content: "";
+    height: 18px;
+    width: 18px;
+    left: 3px;
+    bottom: 3px;
+    background: white;
+    border-radius: 50%;
+    transition: 0.3s;
+}
+
+input:checked + .toggle-slider {
+    background: var(--accent);
+}
+
+input:checked + .toggle-slider::before {
+    transform: translateX(24px);
+}
+
+/* Stats Toggle (Total vs T4W) */
+.stats-toggle {
+    display: flex;
+    background: var(--input-bg);
+    border-radius: 8px;
+    padding: 4px;
+    margin-bottom: 1rem;
+}
+
+.stats-toggle-btn {
+    flex: 1;
+    padding: 0.5rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.8rem;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: all 0.3s ease;
+}
+
+.stats-toggle-btn.active {
+    background: var(--accent);
+    color: white;
+}
+
+/* Marketplace Checkboxes */
+.mp-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.mp-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    transition: background 0.3s ease;
+}
+
+.mp-item:hover {
+    background: var(--bg-glass);
+}
+
+.mp-checkbox {
+    appearance: none;
+    width: 18px;
+    height: 18px;
+    border: 2px solid var(--border-color);
+    border-radius: 4px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.mp-checkbox:checked {
+    background: var(--accent);
+    border-color: var(--accent);
+}
+
+.mp-checkbox:checked::after {
+    content: '✓';
+    display: block;
+    text-align: center;
+    color: white;
+    font-size: 12px;
+    line-height: 14px;
+}
+
+.mp-flag {
+    width: 24px;
+    height: 24px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.7rem;
+    font-weight: 600;
+    color: white;
+}
+
+.mp-flag.eu5 { background: linear-gradient(135deg, #667eea, #764ba2); }
+.mp-flag.uk { background: linear-gradient(135deg, #ff9900, #ff6b00); }
+.mp-flag.de { background: linear-gradient(135deg, #00d9ff, #0099cc); }
+.mp-flag.fr { background: linear-gradient(135deg, #ff6b9d, #c44569); }
+.mp-flag.it { background: linear-gradient(135deg, #00e676, #00a152); }
+.mp-flag.es { background: linear-gradient(135deg, #ffeb3b, #ffc107); color: #333; }
+
+/* Model Info Card */
+.model-info {
+    background: var(--bg-glass);
+    border-radius: 8px;
+    padding: 1rem;
+    margin-top: auto;
+    display: none;
+}
+
+.model-info.show {
+    display: block;
+}
+
+.model-info h4 {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+}
+
+.model-info p {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.25rem;
+}
+
+/* Main Content */
+.main-content {
+    flex: 1;
+    padding: 2rem;
+    overflow-y: auto;
+}
+
+/* Dashboard Sections */
+.dashboard-section {
+    margin-bottom: 2rem;
+}
+
+.section-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1.5rem;
+}
+
+.section-title {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.25rem;
+    font-weight: 600;
+}
+
+.section-title i {
+    color: var(--accent);
+}
+
+.current-metric {
+    padding: 0.5rem 1rem;
+    background: var(--accent);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+/* Stats Grid */
+.stats-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1rem;
+}
+
+.stat-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.25rem;
+    transition: all 0.3s ease;
+}
+
+.stat-card:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow);
+    border-color: var(--accent);
+}
+
+.stat-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.stat-card-header h4 {
+    font-size: 1rem;
+    font-weight: 600;
+}
+
+.stat-card-body {
+    display: grid;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 1rem;
+}
+
+.stat-item {
+    text-align: center;
+}
+
+.stat-item .value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+}
+
+.stat-item .label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    margin-top: 0.25rem;
+}
+
+/* Charts Grid */
+.charts-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+}
+
+.chart-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.chart-card:hover {
+    box-shadow: var(--shadow);
+}
+
+.chart-card.clickable {
+    cursor: pointer;
+}
+
+.chart-card.clickable:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.expand-icon {
+    color: var(--text-muted);
+    font-size: 0.9rem;
+    opacity: 0;
+    transition: all 0.3s ease;
+}
+
+.chart-card.clickable:hover .expand-icon {
+    opacity: 1;
+    color: var(--accent);
+}
+
+.chart-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+}
+
+.chart-card-header h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1rem;
+}
+
+.chart-icon {
+    width: 32px;
+    height: 32px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-size: 0.9rem;
+}
+
+.chart-container {
+    height: 350px;
+    position: relative;
+    overflow: hidden;
+}
+
+.forecast-stats {
+    display: flex;
+    gap: 2rem;
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid var(--border-color);
+}
+
+.forecast-stat {
+    text-align: center;
+}
+
+.forecast-stat .value {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--accent);
+}
+
+.forecast-stat .label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+}
+
+/* Upload Section */
+.upload-section {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    min-height: calc(100vh - 60px);
+    padding: 2rem;
+}
+
+.upload-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 24px;
+    padding: 3rem;
+    max-width: 500px;
+    width: 100%;
+    text-align: center;
+}
+
+.upload-card h2 {
+    font-size: 1.5rem;
+    margin-bottom: 0.5rem;
+}
+
+.upload-card p {
+    color: var(--text-secondary);
+    margin-bottom: 2rem;
+}
+
+.dropzone {
+    border: 2px dashed var(--border-color);
+    border-radius: 16px;
+    padding: 3rem 2rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.dropzone:hover, .dropzone.dragover {
+    border-color: var(--accent);
+    background: rgba(255, 153, 0, 0.05);
+}
+
+.dropzone i {
+    font-size: 3rem;
+    color: var(--accent);
+    margin-bottom: 1rem;
+}
+
+.dropzone h3 {
+    margin-bottom: 0.5rem;
+}
+
+.dropzone span {
+    font-size: 0.875rem;
+    color: var(--text-muted);
+}
+
+/* Loading Overlay */
+.loading-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 10, 26, 0.9);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    flex-direction: column;
+    gap: 1.5rem;
+}
+
+.loading-overlay.active {
+    display: flex;
+}
+
+.spinner {
+    width: 50px;
+    height: 50px;
+    border: 4px solid var(--border-color);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+    to { transform: rotate(360deg); }
+}
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1001;
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.toast {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    padding: 1rem 1.5rem;
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: var(--shadow);
+    animation: slideIn 0.3s ease;
+    min-width: 300px;
+}
+
+@keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+}
+
+.toast.success i { color: var(--success); }
+.toast.error i { color: var(--error); }
+.toast.warning i { color: var(--warning); }
+
+.toast-content {
+    flex: 1;
+}
+
+.toast-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+}
+
+.toast-message {
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.toast-close {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    padding: 0.25rem;
+}
+
+/* Accuracy Panel */
+.accuracy-section {
+    margin-top: 2rem;
+}
+
+.accuracy-panel {
+    background: var(--card-bg);
+    border-radius: var(--border-radius);
+    padding: 1rem;
+}
+
+.accuracy-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+    gap: 1rem;
+}
+
+.accuracy-card {
+    background: var(--bg-secondary);
+    border-radius: var(--border-radius-sm);
+    padding: 1rem;
+    border: 1px solid var(--border-color);
+}
+
+.accuracy-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.accuracy-value {
+    font-size: 1.25rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+}
+
+.accuracy-value.good {
+    background: rgba(0, 230, 118, 0.2);
+    color: #00e676;
+}
+
+.accuracy-value.medium {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.accuracy-value.poor {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+}
+
+.accuracy-details {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+.accuracy-item {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+}
+
+.accuracy-item .label {
+    color: var(--text-muted);
+}
+
+.accuracy-item .value {
+    font-weight: 500;
+}
+
+.accuracy-item .value.over {
+    color: #ffc107;
+}
+
+.accuracy-item .value.under {
+    color: #00bcd4;
+}
+
+/* Accuracy badge in chart stats */
+.accuracy-badge {
+    padding: 0.15rem 0.4rem;
+    border-radius: 4px;
+    font-size: 0.9rem;
+}
+
+.accuracy-badge.good {
+    background: rgba(0, 230, 118, 0.2);
+    color: #00e676;
+}
+
+.accuracy-badge.medium {
+    background: rgba(255, 193, 7, 0.2);
+    color: #ffc107;
+}
+
+.accuracy-badge.poor {
+    background: rgba(244, 67, 54, 0.2);
+    color: #f44336;
+}
+
+/* Footer */
+.footer {
+    text-align: center;
+    padding: 1rem;
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    border-top: 1px solid var(--border-color);
+}
+
+/* Responsive */
+@media (max-width: 1200px) {
+    .charts-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+@media (max-width: 768px) {
+    .sidebar {
+        display: none;
+    }
+    
+    .header-content {
+        padding: 0 1rem;
+    }
+    
+    .main-content {
+        padding: 1rem;
+    }
+}
+
+/* Chart Modal */
+.chart-modal {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(10, 10, 26, 0.95);
+    backdrop-filter: blur(10px);
+    z-index: 2000;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+}
+
+.chart-modal.active {
+    display: flex;
+    opacity: 1;
+    animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+
+.chart-modal-content {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 20px;
+    width: 100%;
+    max-width: 1200px;
+    max-height: 90vh;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    animation: scaleIn 0.3s ease;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+}
+
+@keyframes scaleIn {
+    from { transform: scale(0.9); opacity: 0; }
+    to { transform: scale(1); opacity: 1; }
+}
+
+.chart-modal-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 1.5rem 2rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.chart-modal-header h3 {
+    font-size: 1.25rem;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.modal-close-btn {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    border: none;
+    background: var(--bg-glass);
+    color: var(--text-secondary);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.25rem;
+    transition: all 0.3s ease;
+}
+
+.modal-close-btn:hover {
+    background: var(--error);
+    color: white;
+}
+
+.chart-modal-body {
+    padding: 2rem;
+    flex: 1;
+    overflow-y: auto;
+}
+
+.modal-chart-container {
+    height: 500px;
+    position: relative;
+}
+
+.modal-forecast-stats {
+    justify-content: center;
+    margin-top: 1.5rem;
+    padding-top: 1.5rem;
+}
+
+/* Tab Navigation */
+.tab-navigation {
+    display: flex;
+    gap: 0.5rem;
+    margin-bottom: 1.5rem;
+    background: var(--bg-glass);
+    padding: 0.5rem;
+    border-radius: 12px;
+    border: 1px solid var(--border-color);
+}
+
+.tab-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    padding: 0.75rem 1.5rem;
+    border: none;
+    background: transparent;
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    font-weight: 500;
+    cursor: pointer;
+    border-radius: 8px;
+    transition: all 0.3s ease;
+}
+
+.tab-btn:hover {
+    background: var(--bg-glass);
+    color: var(--text-primary);
+}
+
+.tab-btn.active {
+    background: var(--accent);
+    color: white;
+    box-shadow: 0 4px 15px rgba(255, 153, 0, 0.3);
+}
+
+.tab-btn i {
+    font-size: 1rem;
+}
+
+/* Tab Content */
+.tab-content {
+    display: none;
+}
+
+.tab-content.active {
+    display: block;
+    animation: fadeIn 0.3s ease;
+}
+
+/* Latest Week Overview */
+.latest-week-label {
+    padding: 0.5rem 1rem;
+    background: linear-gradient(135deg, var(--accent), #ff6b00);
+    color: white;
+    border-radius: 20px;
+    font-size: 0.9rem;
+    font-weight: 600;
+}
+
+.latest-week-container {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+}
+
+.latest-week-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.latest-week-table thead tr:first-child th {
+    background: var(--bg-secondary);
+    padding: 1rem 0.5rem;
+    font-weight: 600;
+    text-align: center;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.latest-week-table thead tr:first-child th:first-child {
+    text-align: left;
+    padding-left: 1rem;
+}
+
+.latest-week-table thead tr.sub-header th {
+    background: var(--bg-glass);
+    padding: 0.5rem;
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    color: var(--text-muted);
+    border-bottom: 1px solid var(--border-color);
+}
+
+.latest-week-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.3s ease;
+}
+
+.latest-week-table tbody tr:hover {
+    background: var(--bg-glass);
+}
+
+.latest-week-table tbody tr:last-child {
+    border-bottom: none;
+}
+
+.latest-week-table td {
+    padding: 0.75rem 0.5rem;
+    text-align: center;
+}
+
+.latest-week-table td.mp-cell {
+    text-align: left;
+    padding-left: 1rem;
+}
+
+.latest-week-table td.value-cell {
+    font-family: 'Inter', monospace;
+    font-weight: 500;
+}
+
+.latest-week-table td.forecast-cell {
+    color: var(--text-secondary);
+}
+
+.latest-week-table td.deviation-cell {
+    font-weight: 600;
+    padding: 0.5rem;
+}
+
+/* Deviation Colors */
+.dev-green {
+    background: rgba(0, 230, 118, 0.15);
+    color: #00e676;
+    border-radius: 4px;
+}
+
+.dev-yellow {
+    background: rgba(255, 193, 7, 0.15);
+    color: #ffc107;
+    border-radius: 4px;
+}
+
+.dev-red {
+    background: rgba(244, 67, 54, 0.15);
+    color: #f44336;
+    border-radius: 4px;
+}
+
+/* Deviation Legend */
+.deviation-legend {
+    display: flex;
+    justify-content: center;
+    gap: 2rem;
+    padding: 1rem;
+    background: var(--bg-glass);
+    border-radius: 8px;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.8rem;
+    color: var(--text-secondary);
+}
+
+.legend-color {
+    width: 16px;
+    height: 16px;
+    border-radius: 4px;
+}
+
+.legend-color.green {
+    background: rgba(0, 230, 118, 0.3);
+    border: 1px solid #00e676;
+}
+
+.legend-color.yellow {
+    background: rgba(255, 193, 7, 0.3);
+    border: 1px solid #ffc107;
+}
+
+.legend-color.red {
+    background: rgba(244, 67, 54, 0.3);
+    border: 1px solid #f44336;
+}
+
+/* Responsive Latest Week Table */
+@media (max-width: 1400px) {
+    .latest-week-table {
+        font-size: 0.75rem;
+    }
+    
+    .latest-week-table td,
+    .latest-week-table th {
+        padding: 0.5rem 0.25rem;
+    }
+}
+
+@media (max-width: 1000px) {
+    .latest-week-container {
+        overflow-x: auto;
+    }
+    
+    .latest-week-table {
+        min-width: 900px;
+    }
+}
+
+/* Scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--border-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--accent);
+}
+
+/* Historic Deviations Tab */
+.historic-deviations-container {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    overflow: hidden;
+    margin-bottom: 1.5rem;
+    max-height: 500px;
+    overflow-y: auto;
+}
+
+.historic-deviations-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.historic-deviations-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+.historic-deviations-table th {
+    background: var(--bg-secondary);
+    padding: 1rem 0.75rem;
+    font-weight: 600;
+    text-align: center;
+    border-bottom: 2px solid var(--border-color);
+    color: var(--text-primary);
+}
+
+.historic-deviations-table th:first-child {
+    text-align: left;
+    padding-left: 1rem;
+}
+
+.historic-deviations-table tbody tr {
+    border-bottom: 1px solid var(--border-color);
+    transition: background 0.3s ease;
+}
+
+.historic-deviations-table tbody tr:hover {
+    background: var(--bg-glass);
+}
+
+.historic-deviations-table td {
+    padding: 0.75rem;
+    text-align: center;
+}
+
+.historic-deviations-table td.week-cell {
+    text-align: left;
+    padding-left: 1rem;
+    font-weight: 500;
+    color: var(--text-secondary);
+}
+
+.historic-deviations-table td.value-cell {
+    font-family: 'Inter', monospace;
+    font-weight: 500;
+}
+
+.historic-deviations-table td.forecast-cell {
+    color: var(--text-secondary);
+}
+
+.historic-deviations-table td.deviation-cell {
+    font-weight: 600;
+    padding: 0.5rem 0.75rem;
+}
+
+/* Deviation Controls */
+.deviation-controls {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.deviation-metric-select,
+.deviation-mp-select {
+    padding: 0.5rem 1rem;
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 8px;
+    color: var(--text-primary);
+    font-size: 0.85rem;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.deviation-metric-select:hover,
+.deviation-mp-select:hover {
+    border-color: var(--accent);
+}
+
+.deviation-metric-select:focus,
+.deviation-mp-select:focus {
+    outline: none;
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(255, 153, 0, 0.1);
+}
+
+/* Deviation Summary */
+.deviation-summary {
+    margin-bottom: 1.5rem;
+}
+
+.deviation-summary-grid {
+    display: flex;
+    gap: 1rem;
+    flex-wrap: wrap;
+    justify-content: center;
+}
+
+.summary-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1rem 1.5rem;
+    text-align: center;
+    min-width: 120px;
+    transition: all 0.3s ease;
+}
+
+.summary-card:hover {
+    border-color: var(--accent);
+    transform: translateY(-2px);
+}
+
+.summary-card .summary-value {
+    font-size: 1.25rem;
+    font-weight: 700;
+    color: var(--accent);
+    margin-bottom: 0.25rem;
+}
+
+.summary-card .summary-label {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    text-transform: uppercase;
+}
+
+.summary-card.summary-good {
+    border-color: rgba(0, 230, 118, 0.5);
+}
+
+.summary-card.summary-good .summary-value {
+    color: #00e676;
+}
+
+.summary-card.summary-warn {
+    border-color: rgba(255, 193, 7, 0.5);
+}
+
+.summary-card.summary-warn .summary-value {
+    color: #ffc107;
+}
+
+.summary-card.summary-bad {
+    border-color: rgba(244, 67, 54, 0.5);
+}
+
+.summary-card.summary-bad .summary-value {
+    color: #f44336;
+}
+
+/* Promo Analysis Styles */
+.promo-legend {
+    margin-bottom: 1.5rem;
+}
+
+.promo-band-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 1rem;
+    justify-content: center;
+    padding: 1rem;
+    background: var(--bg-glass);
+    border-radius: 8px;
+}
+
+.promo-analysis-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.promo-card {
+    background: var(--bg-card);
+    backdrop-filter: blur(20px);
+    border: 1px solid var(--border-color);
+    border-radius: 16px;
+    padding: 1.5rem;
+    transition: all 0.3s ease;
+}
+
+.promo-card:hover {
+    box-shadow: var(--shadow);
+    border-color: var(--accent);
+}
+
+.promo-card-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-card-header h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    font-size: 1.1rem;
+}
+
+.promo-band-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.85rem;
+}
+
+.promo-band-table th {
+    text-align: left;
+    padding: 0.5rem;
+    color: var(--text-muted);
+    font-weight: 500;
+    font-size: 0.75rem;
+    text-transform: uppercase;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-band-table td {
+    padding: 0.75rem 0.5rem;
+    border-bottom: 1px solid var(--border-color);
+}
+
+.promo-band-table tr:last-child td {
+    border-bottom: none;
+}
+
+.promo-band-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.promo-band-dot {
+    width: 12px;
+    height: 12px;
+    border-radius: 3px;
+}
+
+.promo-band-dot.no-promo { background: rgba(76, 175, 80, 0.6); }
+.promo-band-dot.light-promo { background: rgba(255, 235, 59, 0.6); }
+.promo-band-dot.medium-promo { background: rgba(255, 152, 0, 0.6); }
+.promo-band-dot.strong-promo { background: rgba(244, 67, 54, 0.6); }
+
+.uplift-value {
+    font-weight: 600;
+    font-size: 1rem;
+}
+
+.uplift-positive {
+    color: #00e676;
+}
+
+.uplift-negative {
+    color: #f44336;
+}
+
+.uplift-neutral {
+    color: var(--text-secondary);
+}
+
+.promo-info-card {
+    background: var(--bg-glass);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.5rem;
+}
+
+.promo-info-card h4 {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.75rem;
+    color: var(--accent);
+}
+
+.promo-info-card p {
+    color: var(--text-secondary);
+    font-size: 0.9rem;
+    margin-bottom: 0.5rem;
+}
+
+.promo-info-card p:last-child {
+    margin-bottom: 0;
+}
+
+    </style>
+</head>
+<body>
+    <div class="bg-animation"></div>
+    
+    <header class="header">
+        <div class="header-content">
+            <div class="logo">
+                <div class="logo-icon">📊</div>
+                <div>
+                    <h1>Amazon Haul EU5</h1>
+                    <span>Static Report | Generated: 2026-02-03 09:37</span>
+                </div>
+            </div>
+            <div class="header-actions">
+                <div class="theme-toggle" id="themeToggle" title="Toggle Light/Dark Mode">
+                    <i class="fas fa-moon active" id="darkIcon"></i>
+                    <div class="theme-switch"></div>
+                    <i class="fas fa-sun" id="lightIcon"></i>
+                </div>
+                <div class="file-status loaded">
+                    <i class="fas fa-file-excel"></i>
+                    <span>..\inputs_forecasting.xlsx</span>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <div class="main-container">
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-section">
+                <h3><i class="fas fa-sliders-h"></i> Controls</h3>
+                <div class="form-group">
+                    <label>Metric</label>
+                    <select id="metricSelect">
+                        <option value="Net Ordered Units">Net Ordered Units</option>
+                        <option value="Transits">Transits</option>
+                        <option value="Transit Conversion">Transit Conversion</option>
+                        <option value="UPO">Units Per Order (UPO)</option>
+                    </select>
+                </div>
+                <div class="toggle-group" id="manualForecastToggleGroup" style="display: block;">
+                    <span class="toggle-label">Manual Forecast</span>
+                    <label class="toggle-switch">
+                        <input type="checkbox" id="manualForecastToggle" checked>
+                        <span class="toggle-slider"></span>
+                    </label>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3><i class="fas fa-globe-europe"></i> Marketplaces</h3>
+                <div class="mp-list">
+                    <label class="mp-item"><input type="checkbox" class="mp-checkbox" value="EU5" checked><div class="mp-flag eu5">EU5</div><span>EU5 (All)</span></label>
+                    <label class="mp-item"><input type="checkbox" class="mp-checkbox" value="UK" checked><div class="mp-flag uk">UK</div><span>United Kingdom</span></label>
+                    <label class="mp-item"><input type="checkbox" class="mp-checkbox" value="DE" checked><div class="mp-flag de">DE</div><span>Germany</span></label>
+                    <label class="mp-item"><input type="checkbox" class="mp-checkbox" value="FR" checked><div class="mp-flag fr">FR</div><span>France</span></label>
+                    <label class="mp-item"><input type="checkbox" class="mp-checkbox" value="IT" checked><div class="mp-flag it">IT</div><span>Italy</span></label>
+                    <label class="mp-item"><input type="checkbox" class="mp-checkbox" value="ES" checked><div class="mp-flag es">ES</div><span>Spain</span></label>
+                </div>
+            </div>
+            
+            <div class="sidebar-section">
+                <h3><i class="fas fa-chart-bar"></i> Statistics View</h3>
+                <div class="stats-toggle">
+                    <button class="stats-toggle-btn active" data-view="total">Total</button>
+                    <button class="stats-toggle-btn" data-view="t4w">T4W</button>
+                    <button class="stats-toggle-btn" data-view="cw">CW</button>
+                </div>
+            </div>
+            
+            <div class="model-info show">
+                <h4>Report Information</h4>
+                <p>Model: SARIMAX</p>
+                <p>Generated: 2026-02-03 09:37</p>
+                <p>Confidence: 85%</p>
+            </div>
+        </aside>
+
+        <main class="main-content" id="mainContent">
+            <section class="dashboard-section" id="dashboardSection">
+                <div class="tab-navigation">
+                    <button class="tab-btn active" data-tab="forecasts"><i class="fas fa-chart-line"></i> Forecasts</button>
+                    <button class="tab-btn" data-tab="latest-week"><i class="fas fa-calendar-week"></i> Latest Week Overview</button>
+                    <button class="tab-btn" data-tab="historic-deviations"><i class="fas fa-history"></i> Historic Deviations</button>
+                </div>
+
+                <div class="tab-content active" id="tab-forecasts">
+                    <div class="section-header">
+                        <h2 class="section-title"><i class="fas fa-analytics"></i> Statistics</h2>
+                        <span class="current-metric" id="currentMetricLabel">Net Ordered Units</span>
+                    </div>
+                    <div class="stats-grid" id="statsGrid"></div>
+
+                    <div class="section-header" style="margin-top: 1rem;">
+                        <h2 class="section-title"><i class="fas fa-chart-line"></i> Forecasts by Marketplace</h2>
+                    </div>
+                    <div class="charts-grid" id="chartsGrid"></div>
+                </div>
+
+                <div class="tab-content" id="tab-latest-week">
+                    <div class="section-header">
+                        <h2 class="section-title"><i class="fas fa-calendar-week"></i> Latest Week Overview</h2>
+                        <span class="latest-week-label" id="latestWeekLabel">--</span>
+                    </div>
+                    <div class="latest-week-container">
+                        <table class="latest-week-table" id="latestWeekTable">
+                            <thead>
+                                <tr>
+                                    <th>Marketplace</th>
+                                    <th colspan="3">Net Ordered Units</th>
+                                    <th colspan="3">Transits</th>
+                                    <th colspan="3">Transit Conversion</th>
+                                    <th colspan="3">UPO</th>
+                                </tr>
+                                <tr class="sub-header">
+                                    <th></th>
+                                    <th>Actual</th><th>Forecast</th><th>Dev %</th>
+                                    <th>Actual</th><th>Forecast</th><th>Dev %</th>
+                                    <th>Actual</th><th>Forecast</th><th>Dev %</th>
+                                    <th>Actual</th><th>Forecast</th><th>Dev %</th>
+                                </tr>
+                            </thead>
+                            <tbody id="latestWeekTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="deviation-legend">
+                        <span class="legend-item"><span class="legend-color green"></span> &lt;20% deviation</span>
+                        <span class="legend-item"><span class="legend-color yellow"></span> 20-30% deviation</span>
+                        <span class="legend-item"><span class="legend-color red"></span> &gt;30% deviation</span>
+                    </div>
+                </div>
+
+                <div class="tab-content" id="tab-historic-deviations">
+                    <div class="section-header">
+                        <h2 class="section-title"><i class="fas fa-history"></i> Historic Deviations</h2>
+                        <div class="deviation-controls">
+                            <select id="deviationMetricSelect" class="deviation-metric-select">
+                                <option value="Net Ordered Units">Net Ordered Units</option>
+                                <option value="Transits">Transits</option>
+                                <option value="Transit Conversion">Transit Conversion</option>
+                                <option value="UPO">UPO</option>
+                            </select>
+                            <select id="deviationMpSelect" class="deviation-mp-select">
+                                <option value="EU5">EU5 (All)</option>
+                                <option value="UK">UK</option>
+                                <option value="DE">DE</option>
+                                <option value="FR">FR</option>
+                                <option value="IT">IT</option>
+                                <option value="ES">ES</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="deviation-chart-container"><div id="deviationChart" class="deviation-chart" style="height:400px;"></div></div>
+                    <div class="historic-deviations-container">
+                        <table class="historic-deviations-table" id="historicDeviationsTable">
+                            <thead><tr><th>Week</th><th>Actual</th><th>Manual FC</th><th>Manual Dev %</th><th>Model FC</th><th>Model Dev %</th></tr></thead>
+                            <tbody id="historicDeviationsTableBody"></tbody>
+                        </table>
+                    </div>
+                    <div class="deviation-summary" id="deviationSummary"></div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <footer class="footer">Amazon Haul EU5 Forecasting Dashboard | Static Report v2.0.0 | 85% Confidence Interval</footer>
+
+    <script>
+        // Embedded Data
+        const dashboardData = {"Net Ordered Units": {"UK": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [2989.0, 6273.0, 3377.0, 44682.0, 45921.0, 10746.0, 48648.0, 26442.0, 19428.0, 19040.0, 15167.0, 38741.0, 32230.0, 156335.0, 202517.0, 111013.0, 84842.0, 116404.0, 270312.0, 86949.0, 175627.0, 181078.0, 456433.0, 68676.0, 225505.0, 278021.0, 76976.0, 947678.0, 561387.0, 714319.0, 599845.0, 464044.0, 266668.0, 229971.0, 288997.0, 349629.0, 323142.0, 232295.0, 250690.0], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [69096.99999999978, 180642.15, 400779.81, 105450.349512935, 613713.6029649889, 332774.8310026238, 685868.9197559035, 298409.5277263775, 293354.93760607985, 317600.38182947785, 264261.139828576, 264972.36497448746, 350805.27987882047, 376965.5640502438, 346112.08772227605, 266743.7434736903, 326718.30161780695, 269327.2313336985, 383901.28867961897, 265183.04636620876, 331822.5846242766], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "DE": {"dates": ["2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [5995.0, 8922.0, 59692.0, 32334.0, 21862.0, 17416.0, 14117.0, 24953.0, 16698.0, 112156.0, 150655.0, 64084.0, 49367.0, 276938.0, 178521.0, 60474.0, 85842.0, 88918.0, 430782.0, 33866.0, 142234.0, 195972.0, 44169.0, 149249.0, 99718.0, 124262.0, 96362.0, 88602.0, 60031.0, 49565.0, 64727.0, 85630.0, 77429.0, 51933.0, 61256.0], "weeks": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [34022.99999999997, 109698.12, 241118.01, 84022.10686592935, 483058.81872078765, 244868.66295275494, 605266.6323818875, 267526.58751410706, 89206.28505303993, 103192.43727450761, 71695.10827900254, 138123.6471549917, 184695.03720122596, 170577.05021267934, 185438.9041406226, 97830.55172772995, 121850.25496240622, 90592.28000482643, 141987.8291527345, 102515.03102087478, 128102.31679247828], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "FR": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [14264.0, 50590.0, 5238.0, 18909.0, 15932.0, 6350.0, 105686.0, 36062.0, 46663.0, 33210.0, 26541.0, 13407.0, 12710.0, 13343.0, 21818.0, 18797.0, 12059.0, 12187.0], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [5299.999999999988, 16001.94375, 35058.427350000005, 17801.824840223817, 133758.31468019693, 47109.28880052476, 112712.72640157427, 58633.042002821414, 21861.804158573847, 24778.189925196784, 18513.731225065596, 34429.82957477776, 50506.493998128055, 38831.53031174089, 55815.181888526815, 31906.460200202462, 43162.59053284305, 34654.494275728415, 52618.15788508434, 39680.88741348848, 64711.901031597794], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "IT": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [23328.0, 75047.0, 11983.0, 48983.0, 58189.0, 24369.0, 477571.0, 232141.0, 268346.0, 227811.0, 200118.0, 134942.0, 102187.0, 116045.0, 159911.0, 157746.0, 122343.0, 110625.0], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [12186.99999999997, 49202.15625, 90960.27004999999, 47471.53290726351, 291917.2487311196, 111245.81354120695, 293040.16062362085, 137788.66393148925, 108827.00187884487, 137611.16925090036, 112984.41607842513, 127649.92041005955, 149946.66445756797, 126785.07850143504, 146156.702688499, 81227.27002858205, 114454.05356902246, 86334.77629879062, 133417.61251746674, 97916.11713129892, 138707.2789805524], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "ES": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [10236.0, 20459.0, 3437.0, 13419.0, 20979.0, 10569.0, 184704.0, 70846.0, 113337.0, 114375.0, 101476.0, 134721.0, 101184.0, 100603.0, 258311.0, 175888.0, 92729.0, 97704.0], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [3516.999999999974, 50821.509375, 60348.1406, 23735.766453631753, 157044.30339280452, 50165.53086036733, 101440.29258110198, 81918.285139475, 19091.23660848639, 26158.86819763775, 21732.393982545917, 66458.42454342768, 134887.04283281852, 73156.1216512493, 133061.9952674561, 48331.82162570735, 105199.71962597249, 50831.34219319173, 117649.23865260642, 54227.6540566604, 120678.20308585466], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "EU5": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [2989.0, 6273.0, 3377.0, 44682.0, 51916.0, 19668.0, 108340.0, 58776.0, 41290.0, 36456.0, 29284.0, 63694.0, 48928.0, 268491.0, 353172.0, 175097.0, 134209.0, 393342.0, 448833.0, 147423.0, 261469.0, 317824.0, 1033311.0, 123200.0, 449050.0, 569093.0, 162433.0, 1864888.0, 1000154.0, 1266927.0, 1071603.0, 880781.0, 609769.0, 495617.0, 583715.0, 875299.0, 753002.0, 511359.0, 532462.0], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [124123.99999999968, 406365.879375, 828264.658, 278481.5805799834, 1679492.2884898975, 786164.1271574778, 1798328.7317440882, 844276.1063142702, 532341.2653050248, 609341.0464777204, 489186.7893936152, 631634.1866577441, 870840.518368561, 786315.3447273483, 866584.8717073805, 526039.8470559121, 711384.9203080512, 531740.1241062357, 829574.126887511, 559522.7359885314, 784022.2845147597], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}}, "Transits": {"UK": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [67675.0, 159326.0, 68991.0, 291980.0, 202532.0, 136517.0, 451150.0, 282149.0, 186009.0, 144506.0, 130840.0, 262857.0, 259239.0, 621831.0, 502671.0, 566411.0, 767945.0, 769676.0, 949072.0, 1057926.0, 1478098.0, 1054529.0, 1519532.0, 921530.0, 1550908.0, 1614481.0, 1024475.0, 4609523.0, 2567889.0, 2410663.0, 2307253.0, 2099303.0, 2042316.0, 1743225.0, 1611180.0, 1439414.0, 1389172.0, 1107351.0, 1194077.0], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [775356.0, 1003567.5, 2226554.5, 1004289.0429803334, 3506934.8740856512, 2773123.5916885315, 2540255.2583551984, 1105220.4730606573, 1676313.929177599, 1539880.639173226, 1281266.1325021866, 1180637.6888888888, 1291804.5555555555, 1679645.9222222222, 1274522.3555555556, 1188530.4222222222, 1203106.7222222222, 1200041.6722222222, 1413677.2222222222, 1181576.4222222222, 1221902.7222222222], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "DE": {"dates": ["2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [151873.0, 178988.0, 567920.0, 210874.0, 254947.0, 215168.0, 206153.0, 292724.0, 245643.0, 874992.0, 627113.0, 747360.0, 825611.0, 1055640.0, 1046563.0, 1117662.0, 1185477.0, 835780.0, 1611568.0, 966591.0, 1513454.0, 1698492.0, 1073054.0, 2978697.0, 2085211.0, 1693802.0, 1986929.0, 1977784.0, 1795614.0, 1487982.0, 1367559.0, 1277012.0, 1261399.0, 1066204.0, 1970459.0], "weeks": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [817784.0, 1044744.0, 2296362.0, 1120294.7582123913, 3450420.133719912, 2720762.9216972776, 2690073.9216972776, 1189007.0556182535, 1427300.5608486389, 1250817.4215091832, 869031.6155030611, 1474744.5444444444, 1629741.0944444444, 1821249.1444444444, 1636304.9444444445, 1044535.6418844444, 1075201.4287444446, 967252.7004444444, 1252894.5205444444, 1094551.7718044445, 1130369.3544444446], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "FR": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [404488.0, 426181.0, 192684.0, 359994.0, 268324.0, 269956.0, 1490491.0, 722619.0, 606491.0, 728825.0, 827229.0, 628957.0, 729311.0, 513048.0, 412666.0, 397887.0, 399012.0, 478066.0], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [165643.0, 196947.0, 508093.15, 296697.080670397, 1091904.6096342604, 785154.8133420793, 626181.8133420793, 372273.2825575963, 397487.3483377063, 330375.8656692904, 246849.74966754127, 514037.9340399533, 623192.4, 579755.4, 688695.54, 476363.98688, 532577.0263399533, 517392.1817999533, 649247.9184399534, 592436.3157999533, 798470.8840399534], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "IT": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [902804.0, 1230356.0, 554434.0, 940467.0, 851323.0, 693342.0, 3034751.0, 1638905.0, 1179861.0, 1906245.0, 2004148.0, 1661838.0, 1499445.0, 1028000.0, 981826.0, 1047291.0, 990397.0, 1502666.0], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [484866.0, 605565.0, 1318264.7833333332, 791192.2151210585, 2382997.948825466, 1854096.892353449, 1628000.892353449, 874848.6598824714, 1295559.5461767246, 1164962.2793727014, 956481.8292353449, 1336375.9907409865, 1297357.1666666667, 1327321.9, 1264565.9466666668, 850374.0003200001, 990270.6885076532, 903844.8425276533, 1154345.7561076533, 1025090.7138876533, 1200112.6074076532], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "ES": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [606478.0, 450536.0, 521850.0, 565060.0, 447930.0, 405104.0, 1951909.0, 643654.0, 715739.0, 1197111.0, 1251997.0, 1373833.0, 1214448.0, 901152.0, 1376576.0, 1010795.0, 815749.0, 1345573.0], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [439948.0, 625495.5, 874610.7333333334, 395596.10756052926, 1281994.313410649, 836092.1810061221, 563557.1810061221, 520116.0961236508, 381824.73216972774, 348784.9093018367, 289765.2531006122, 825971.8905629701, 960171.9, 909213.55, 947180.5900000001, 600687.2169600001, 748847.4248629701, 631752.2586429701, 837467.34036297, 673962.9813629701, 859028.5405629701], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "EU5": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [67675.0, 159326.0, 68991.0, 291980.0, 354405.0, 315505.0, 1019070.0, 493023.0, 440956.0, 359674.0, 336993.0, 555581.0, 504882.0, 1496823.0, 1129784.0, 1313771.0, 1593556.0, 1825316.0, 1995635.0, 2175588.0, 2663575.0, 3804079.0, 5238173.0, 3157089.0, 4929883.0, 4880550.0, 3465931.0, 14065371.0, 7658278.0, 6606556.0, 8126363.0, 8160461.0, 7502558.0, 6674411.0, 5420939.0, 5487494.0, 5106544.0, 4378713.0, 6490841.0], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [2683597.0, 3476319.0, 7223885.166666667, 3608069.204544709, 11714251.87967594, 8969230.400087459, 8048069.066754127, 4061465.5672426294, 5178486.1167103965, 4634821.115026238, 3643394.580008746, 5331768.048677243, 5802267.116666667, 6317185.916666666, 5811269.376666667, 4160491.2682666667, 4550003.290677244, 4220283.655637244, 5307632.757677243, 4567618.205077244, 5209884.108677244], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}}, "Transit Conversion": {"UK": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [0.00833394902105652, 0.007895760892760754, 0.009247583018074821, 0.01960750736351805, 0.02738332707917761, 0.014437762329966231, 0.019139975617865453, 0.01827403251473512, 0.020224827830911406, 0.02484325910342823, 0.021163252827881382, 0.02442392631735126, 0.020259297405097226, 0.023253906608065537, 0.03217810456541157, 0.01890676558188312, 0.015568823288126104, 0.016856443490507696, 0.028854502082033818, 0.01399152681756569, 0.017662563645982877, 0.02103119022805442, 0.02847455663980752, 0.013135763350080844, 0.01816097408743781, 0.022205897746706216, 0.016, 0.039, 0.03, 0.034732137375364576, 0.029979449299789355, 0.034643946358327515, 0.018287750210009987, 0.018842737608663597, 0.02601942397352766, 0.032348181750670606, 0.03153101271836749, 0.0305232938788153, 0.02999304064980734], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [0.0157282590190828, 0.0225, 0.0225, 0.0175, 0.025, 0.02, 0.03, 0.03, 0.025, 0.0275, 0.0275, 0.025582525859249354, 0.02814077844517429, 0.025582525859249354, 0.02814077844517429, 0.025582525859249354, 0.02814077844517429, 0.025582525859249354, 0.02814077844517429, 0.025582525859249354, 0.02814077844517429], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "DE": {"dates": ["2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [0.008237145509735108, 0.010168279437727669, 0.01629630933934357, 0.020505135768278688, 0.015618932562454156, 0.014941812908982749, 0.013014605656963517, 0.013883385031633893, 0.01080022634473606, 0.012594400863093606, 0.020918080154613283, 0.009199047313209164, 0.008964270098145495, 0.018354742146944034, 0.016971744653690224, 0.009191508702988918, 0.012163880024665176, 0.014664146067146857, 0.025065029834298026, 0.006634657264551398, 0.012298358589028804, 0.015274137293552162, 0.01, 0.014, 0.012, 0.01466391389769144, 0.010350188900076473, 0.010263285263674541, 0.00865265405735976, 0.008804330995590848, 0.012607112092128185, 0.01619593976012826, 0.01564294882111053, 0.01349085165690618, 0.008379773443649425], "weeks": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [0.00789328233372137, 0.015, 0.015, 0.0125, 0.02, 0.015, 0.025, 0.025, 0.0125, 0.015, 0.015, 0.016665091291966784, 0.018331600421163465, 0.016665091291966784, 0.018331600421163465, 0.016665091291966784, 0.018331600421163465, 0.016665091291966784, 0.018331600421163465, 0.016665091291966784, 0.018331600421163465], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "FR": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [0.005641700124601966, 0.013193924647039638, 0.005153515600672604, 0.007525125418756979, 0.008649990310221971, 0.005, 0.02, 0.011, 0.014371024306921299, 0.008141439175456051, 0.006064045006017812, 0.016970058345412434, 0.004571580555303824, 0.006965419989210635, 0.0121230628112458, 0.01133990303779716, 0.007706535141800246, 0.006308752348002158], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [0.00612159886019934, 0.0125, 0.0115, 0.01, 0.0175, 0.01, 0.02, 0.0175, 0.01, 0.0125, 0.0125, 0.009090339938992048, 0.009999373932891254, 0.009090339938992048, 0.009999373932891254, 0.009090339938992048, 0.009999373932891254, 0.009090339938992048, 0.009999373932891254, 0.009090339938992048, 0.009999373932891254], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "IT": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [0.003917793895463467, 0.006788279164729558, 0.003818308400999939, 0.008447930655727421, 0.01086191727464194, 0.007, 0.029, 0.016, 0.022482425001580028, 0.012305027868726675, 0.011260587039863192, 0.010288851683757662, 0.009498728542847884, 0.015529640306558382, 0.02075756896044981, 0.01994001667158412, 0.01659839438124308, 0.01003882432955826], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [0.00447340089839254, 0.0125, 0.0115, 0.01, 0.0175, 0.01, 0.02, 0.0175, 0.014, 0.0175, 0.0175, 0.011086078152387291, 0.012194685967626021, 0.011086078152387291, 0.012194685967626021, 0.011086078152387291, 0.012194685967626021, 0.011086078152387291, 0.012194685967626021, 0.011086078152387291, 0.012194685967626021], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "ES": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [0.0028113138481527774, 0.005451284692011294, 0.0013394653636102328, 0.0043163557852263475, 0.009405487464559194, 0.007, 0.02, 0.014, 0.017774232797905368, 0.01042463473989901, 0.008942237027629134, 0.0237264824448784, 0.01832623394377489, 0.026749182009756033, 0.04455939628857696, 0.03620417592093352, 0.01612996154454373, 0.01040225985509519], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [0.0016251920681535, 0.0125, 0.0115, 0.01, 0.0175, 0.01, 0.02, 0.0175, 0.01, 0.0125, 0.0125, 0.010395375027810762, 0.0165, 0.010395375027810762, 0.0165, 0.010395375027810762, 0.0165, 0.010395375027810762, 0.0165, 0.010395375027810762, 0.0165], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "EU5": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [0.00833394902105652, 0.007895760892760754, 0.009247583018074821, 0.01960750736351805, 0.01781023629445636, 0.01230302088384695, 0.01771814247860451, 0.019389584141506905, 0.017921880196682782, 0.01989253600620549, 0.01708892924242245, 0.019153655674492575, 0.015529761874916642, 0.01792415373557957, 0.026548092360012425, 0.014052906447546143, 0.012266546693135798, 0.017605592818725865, 0.02291312336786202, 0.011591517760277304, 0.014913221835324026, 0.009613228832683899, 0.01579461499557721, 0.006016341995983003, 0.010149748907235473, 0.013279486017936295, 0.009000000000000001, 0.024399999999999998, 0.016599999999999997, 0.020804746675892542, 0.014240147996789512, 0.014234820139102438, 0.01558515934828365, 0.012008722329236209, 0.017574155674236182, 0.025196829914214285, 0.022931611433958565, 0.016889807320661705, 0.013024530125222472], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [0.00716834663590991, 0.015, 0.0144, 0.012, 0.0195, 0.013000000000000001, 0.023, 0.021500000000000002, 0.014300000000000002, 0.016999999999999998, 0.016999999999999998, 0.014563882054081248, 0.017033287753371006, 0.014563882054081248, 0.017033287753371006, 0.014563882054081248, 0.017033287753371006, 0.014563882054081248, 0.017033287753371006, 0.014563882054081248, 0.017033287753371006], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}}, "UPO": {"UK": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [5.299645390070922, 4.986486486486487, 5.293103448275862, 7.80471615720524, 8.280021637216011, 5.4520547945205475, 5.633815865662999, 5.1283941039565555, 5.164274322169059, 5.303621169916434, 5.477428674611773, 6.034423676012461, 6.136709824828637, 10.811549100968188, 12.520370942812983, 10.366327388178167, 7.096186015389763, 8.972098042238322, 9.870805185320432, 5.874138629914876, 6.727199601639407, 8.164757868157634, 10.548973837478044, 5.673358116480793, 8.006284172406447, 7.754902234247301, 4.64, 5.22, 7.287269815790324, 8.531476319999934, 8.672018044835134, 8.24777033615443, 7.13982690239904, 7.0012506761892475, 6.893687533360643, 7.50882272230227, 7.377334368293686, 6.872633136094675, 6.999776623666722], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [5.6660106601066, 8.0, 8.0, 6.0, 7.0, 6.0, 9.0, 9.0, 7.0, 7.5, 7.5, 8.772846234097507, 9.650130857507259, 8.772846234097507, 9.650130857507259, 8.772846234097507, 9.650130857507259, 8.772846234097507, 9.650130857507259, 8.772846234097507, 9.650130857507259], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "DE": {"dates": ["2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [4.792166266986411, 4.9021978021978025, 6.449702863317126, 7.477798334875116, 5.490205926670015, 5.417107309486781, 5.261647409616101, 6.140009842519685, 6.294006784771956, 10.177495462794917, 11.484601311175483, 9.321309090909091, 6.670314822321308, 14.292836498761353, 10.050726269564239, 5.886693273629904, 5.952981969486824, 7.255058746736292, 10.664504629400406, 5.280835802276625, 7.641648310320743, 7.553945187526501, 4.12, 3.46, 3.9851282835805746, 4.926696851225822, 4.55820053962673, 4.281809995429228, 3.886645019475232, 3.7868262048868875, 3.751126181758886, 4.14392711266613, 3.924032029191161, 3.610469966629589, 3.709786821705426], "weeks": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [5.27079783113865, 7.0, 7.0, 6.0, 7.0, 6.0, 9.0, 9.0, 5.0, 5.5, 5.5, 5.620093515158434, 6.182102866674278, 5.620093515158434, 6.182102866674278, 5.620093515158434, 6.182102866674278, 5.620093515158434, 6.182102866674278, 5.620093515158434, 6.182102866674278], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "FR": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [6.250657318141981, 8.996976702827672, 5.2749244712990935, 6.980066445182724, 6.864282636794485, 4.26, 3.59, 4.536780289978034, 5.341987449113012, 5.452453510787912, 5.207318336276896, 1.2513701254616771, 3.808812701303011, 3.7793612878327174, 4.372684543916872, 4.166001773049645, 3.921626016260162, 4.040782493368701], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [5.22682445759368, 6.5, 6.0, 6.0, 7.0, 6.0, 9.0, 9.0, 5.5, 6.0, 6.0, 7.368169013377037, 8.10498591471474, 7.368169013377037, 8.10498591471474, 7.368169013377037, 8.10498591471474, 7.368169013377037, 8.10498591471474, 7.368169013377037, 8.10498591471474], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "IT": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [6.595419847328245, 8.98551245210728, 5.660368445914029, 6.165261170547514, 6.292743592516492, 4.75, 5.43, 8.852747718751239, 10.11453812779641, 9.478211315964108, 8.80690088256955, 7.908457942350579, 7.176444384422235, 7.271322675097276, 7.846315528413386, 7.553799741416463, 7.442241012227021, 7.333443818362612], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [5.6187183033656, 6.5, 6.0, 6.0, 7.0, 6.0, 9.0, 9.0, 6.0, 6.75, 6.75, 8.616163826149936, 9.47778020876493, 8.616163826149936, 9.47778020876493, 8.616163826149936, 9.47778020876493, 8.616163826149936, 9.47778020876493, 8.616163826149936, 9.47778020876493], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "ES": {"dates": ["2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [6.003519061583578, 8.330211726384364, 4.917024320457797, 5.501845018450185, 4.979586992641823, 3.78, 4.71, 7.862032351898025, 8.846159507865297, 8.916674819628255, 9.00872903050087, 4.680876700443212, 4.553769836172483, 4.178248364315898, 4.205774189002278, 4.806339663888509, 7.04734762121903, 6.980352932771308], "weeks": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [4.91888111888111, 6.5, 6.0, 6.0, 7.0, 6.0, 9.0, 9.0, 5.0, 6.0, 6.0, 7.740065079538069, 8.514071587491877, 7.740065079538069, 8.514071587491877, 7.740065079538069, 8.514071587491877, 7.740065079538069, 8.514071587491877, 7.740065079538069, 8.514071587491877], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}, "EU5": {"dates": ["2025-05-05", "2025-05-12", "2025-05-19", "2025-05-26", "2025-06-02", "2025-06-09", "2025-06-16", "2025-06-23", "2025-06-30", "2025-07-07", "2025-07-14", "2025-07-21", "2025-07-28", "2025-08-04", "2025-08-11", "2025-08-18", "2025-08-25", "2025-09-01", "2025-09-08", "2025-09-15", "2025-09-22", "2025-09-29", "2025-10-06", "2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "values": [5.299645390070922, 4.986486486486487, 5.293103448275862, 7.80471615720524, 6.536093952101211, 5.177126298359175, 6.041759364490062, 6.303096219415836, 5.3272401244195375, 5.360364239701608, 5.369538042113938, 6.087216759266074, 6.215358304800297, 10.494522281881553, 12.002486126994233, 9.84381823954363, 6.8832504188555355, 11.632467270499838, 9.960765727442336, 5.88041595177239, 6.340090785563115, 6.853882568389546, 9.505235869639552, 5.361302231285668, 6.859021023381523, 6.68909212874532, 4.3100000000000005, 4.482, 6.50479169199964, 7.552171651200095, 7.4155116461684285, 7.110505716186195, 4.973435338025948, 5.265420760594774, 5.174749208473084, 5.615504819260186, 5.565501515167893, 5.778863550486096, 5.812828537974953], "weeks": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026"], "week_labels": ["Wk19 2025", "Wk20 2025", "Wk21 2025", "Wk22 2025", "Wk23 2025", "Wk24 2025", "Wk25 2025", "Wk26 2025", "Wk27 2025", "Wk28 2025", "Wk29 2025", "Wk30 2025", "Wk31 2025", "Wk32 2025", "Wk33 2025", "Wk34 2025", "Wk35 2025", "Wk36 2025", "Wk37 2025", "Wk38 2025", "Wk39 2025", "Wk40 2025", "Wk41 2025", "Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk 1 2026", "Wk 2 2026", "Wk 3 2026", "Wk 4 2026", "Wk 5 2026"], "manual_forecast": [5.340246474217128, 6.9, 6.6, 6.0, 7.0, 6.0, 9.0, 9.0, 5.7, 6.35, 6.35, 7.623467533664197, 8.385814287030616, 7.623467533664197, 8.385814287030616, 7.623467533664197, 8.385814287030616, 7.623467533664197, 8.385814287030616, 7.623467533664197, 8.385814287030616], "manual_weeks": ["Wk42 2025", "Wk43 2025", "Wk44 2025", "Wk45 2025", "Wk46 2025", "Wk47 2025", "Wk48 2025", "Wk49 2025", "Wk50 2025", "Wk51 2025", "Wk52 2025", "Wk01 2026", "Wk02 2026", "Wk03 2026", "Wk04 2026", "Wk05 2026", "Wk06 2026", "Wk07 2026", "Wk08 2026", "Wk09 2026", "Wk10 2026"], "manual_dates": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26", "2026-02-02", "2026-02-09", "2026-02-16", "2026-02-23", "2026-03-02"]}}};
+        const forecastsData = {"Transits": {}, "Transit Conversion": {}, "UPO": {}, "Net Ordered Units": {}};
+        const statisticsData = {"Net Ordered Units": {"UK": {"total": 8033037.0, "average": 205975.31, "min": 2989.0, "max": 947678.0, "count": 39, "last_4_week_avg": 288939.0, "std_dev": 217388.5, "t4w_total": 1155756.0, "t4w_avg": 288939.0, "t4w_min": 232295.0, "t4w_max": 349629.0, "cw_value": 250690.0}, "DE": {"total": 3124731.0, "average": 89278.03, "min": 5995.0, "max": 430782.0, "count": 35, "last_4_week_avg": 69062.0, "std_dev": 83856.04, "t4w_total": 276248.0, "t4w_avg": 69062.0, "t4w_min": 51933.0, "t4w_max": 85630.0, "cw_value": 61256.0}, "FR": {"total": 463766.0, "average": 25764.78, "min": 5238.0, "max": 105686.0, "count": 18, "last_4_week_avg": 16215.25, "std_dev": 23751.79, "t4w_total": 64861.0, "t4w_avg": 16215.25, "t4w_min": 12059.0, "t4w_max": 21818.0, "cw_value": 12187.0}, "IT": {"total": 2551685.0, "average": 141760.28, "min": 11983.0, "max": 477571.0, "count": 18, "last_4_week_avg": 137656.25, "std_dev": 112894.68, "t4w_total": 550625.0, "t4w_avg": 137656.25, "t4w_min": 110625.0, "t4w_max": 159911.0, "cw_value": 110625.0}, "ES": {"total": 1624977.0, "average": 90276.5, "min": 3437.0, "max": 258311.0, "count": 18, "last_4_week_avg": 156158.0, "std_dev": 70395.37, "t4w_total": 624632.0, "t4w_avg": 156158.0, "t4w_min": 92729.0, "t4w_max": 258311.0, "cw_value": 97704.0}, "EU5": {"total": 15798196.0, "average": 405081.95, "min": 2989.0, "max": 1864888.0, "count": 39, "last_4_week_avg": 668030.5, "std_dev": 426193.51, "t4w_total": 2672122.0, "t4w_avg": 668030.5, "t4w_min": 511359.0, "t4w_max": 875299.0, "cw_value": 532462.0}}, "Transits": {"UK": {"total": 41564222.0, "average": 1065749.28, "min": 67675.0, "max": 4609523.0, "count": 39, "last_4_week_avg": 1282503.5, "std_dev": 930427.15, "t4w_total": 5130014.0, "t4w_avg": 1282503.5, "t4w_min": 1107351.0, "t4w_max": 1439414.0, "cw_value": 1194077.0}, "DE": {"total": 38452299.0, "average": 1098637.11, "min": 151873.0, "max": 2978697.0, "count": 35, "last_4_week_avg": 1393768.5, "std_dev": 681608.09, "t4w_total": 5575074.0, "t4w_avg": 1393768.5, "t4w_min": 1066204.0, "t4w_max": 1970459.0, "cw_value": 1970459.0}, "FR": {"total": 9856229.0, "average": 547568.28, "min": 192684.0, "max": 1490491.0, "count": 18, "last_4_week_avg": 421907.75, "std_dev": 296450.63, "t4w_total": 1687631.0, "t4w_avg": 421907.75, "t4w_min": 397887.0, "t4w_max": 478066.0, "cw_value": 478066.0}, "IT": {"total": 23648099.0, "average": 1313783.28, "min": 554434.0, "max": 3034751.0, "count": 18, "last_4_week_avg": 1130545.0, "std_dev": 592223.85, "t4w_total": 4522180.0, "t4w_avg": 1130545.0, "t4w_min": 981826.0, "t4w_max": 1502666.0, "cw_value": 1502666.0}, "ES": {"total": 16795494.0, "average": 933083.0, "min": 405104.0, "max": 1951909.0, "count": 18, "last_4_week_avg": 1137173.25, "std_dev": 431122.27, "t4w_total": 4548693.0, "t4w_avg": 1137173.25, "t4w_min": 815749.0, "t4w_max": 1376576.0, "cw_value": 1345573.0}, "EU5": {"total": 130316343.0, "average": 3341444.69, "min": 67675.0, "max": 14065371.0, "count": 39, "last_4_week_avg": 5365898.0, "std_dev": 3189612.0, "t4w_total": 21463592.0, "t4w_avg": 5365898.0, "t4w_min": 4378713.0, "t4w_max": 6490841.0, "cw_value": 6490841.0}}, "Transit Conversion": {"UK": {"total": 0.88, "average": 0.02, "min": 0.01, "max": 0.04, "count": 39, "last_4_week_avg": 0.03, "std_dev": 0.01, "t4w_total": 0.12, "t4w_avg": 0.03, "t4w_min": 0.03, "t4w_max": 0.03, "cw_value": 0.03}, "DE": {"total": 0.46, "average": 0.01, "min": 0.01, "max": 0.03, "count": 35, "last_4_week_avg": 0.01, "std_dev": 0.0, "t4w_total": 0.05, "t4w_avg": 0.01, "t4w_min": 0.01, "t4w_max": 0.02, "cw_value": 0.01}, "FR": {"total": 0.17, "average": 0.01, "min": 0.0, "max": 0.02, "count": 18, "last_4_week_avg": 0.01, "std_dev": 0.0, "t4w_total": 0.04, "t4w_avg": 0.01, "t4w_min": 0.01, "t4w_max": 0.01, "cw_value": 0.01}, "IT": {"total": 0.23, "average": 0.01, "min": 0.0, "max": 0.03, "count": 18, "last_4_week_avg": 0.02, "std_dev": 0.01, "t4w_total": 0.07, "t4w_avg": 0.02, "t4w_min": 0.01, "t4w_max": 0.02, "cw_value": 0.01}, "ES": {"total": 0.28, "average": 0.02, "min": 0.0, "max": 0.04, "count": 18, "last_4_week_avg": 0.03, "std_dev": 0.01, "t4w_total": 0.11, "t4w_avg": 0.03, "t4w_min": 0.01, "t4w_max": 0.04, "cw_value": 0.01}, "EU5": {"total": 0.62, "average": 0.02, "min": 0.01, "max": 0.03, "count": 39, "last_4_week_avg": 0.02, "std_dev": 0.0, "t4w_total": 0.08, "t4w_avg": 0.02, "t4w_min": 0.01, "t4w_max": 0.03, "cw_value": 0.01}}, "UPO": {"UK": {"total": 280.77, "average": 7.2, "min": 4.64, "max": 12.52, "count": 39, "last_4_week_avg": 7.19, "std_dev": 1.86, "t4w_total": 28.76, "t4w_avg": 7.19, "t4w_min": 6.87, "t4w_max": 7.51, "cw_value": 7.0}, "DE": {"total": 216.6, "average": 6.19, "min": 3.46, "max": 14.29, "count": 35, "last_4_week_avg": 3.85, "std_dev": 2.61, "t4w_total": 15.39, "t4w_avg": 3.85, "t4w_min": 3.61, "t4w_max": 4.14, "cw_value": 3.71}, "FR": {"total": 88.1, "average": 4.89, "min": 1.25, "max": 9.0, "count": 18, "last_4_week_avg": 4.13, "std_dev": 1.68, "t4w_total": 16.5, "t4w_avg": 4.13, "t4w_min": 3.92, "t4w_max": 4.37, "cw_value": 4.04}, "IT": {"total": 133.66, "average": 7.43, "min": 4.75, "max": 10.11, "count": 18, "last_4_week_avg": 7.54, "std_dev": 1.46, "t4w_total": 30.18, "t4w_avg": 7.54, "t4w_min": 7.33, "t4w_max": 7.85, "cw_value": 7.33}, "ES": {"total": 109.31, "average": 6.07, "min": 3.78, "max": 9.01, "count": 18, "last_4_week_avg": 5.76, "std_dev": 1.84, "t4w_total": 23.04, "t4w_avg": 5.76, "t4w_min": 4.21, "t4w_max": 7.05, "cw_value": 6.98}, "EU5": {"total": 259.67, "average": 6.66, "min": 4.31, "max": 12.0, "count": 39, "last_4_week_avg": 5.69, "std_dev": 1.91, "t4w_total": 22.77, "t4w_avg": 5.69, "t4w_min": 5.57, "t4w_max": 5.81, "cw_value": 5.81}}};
+        const accuracyData = {"total": {"Net Ordered Units": {"UK": {"mape": 23.96, "wmape": 26.43, "bias": -12.08, "accuracy": 73.57, "overlap_weeks": 16, "total_actual": 5877843.0, "total_forecast": 5167551.69, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "DE": {"mape": 115.87, "wmape": 122.84, "bias": 118.27, "accuracy": 0, "overlap_weeks": 16, "total_actual": 1425005.0, "total_forecast": 3110340.96, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "FR": {"mape": 103.82, "wmape": 80.04, "bias": 76.23, "accuracy": 19.96, "overlap_weeks": 16, "total_actual": 398912.0, "total_forecast": 703018.79, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "IT": {"mape": 27.06, "wmape": 28.05, "bias": -17.46, "accuracy": 71.95, "overlap_weeks": 16, "total_actual": 2453310.0, "total_forecast": 2025001.07, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "ES": {"mape": 71.92, "wmape": 50.37, "bias": -34.02, "accuracy": 49.63, "overlap_weeks": 16, "total_actual": 1594282.0, "total_forecast": 1051868.73, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "EU5": {"mape": 21.65, "wmape": 20.25, "bias": 2.63, "accuracy": 79.75, "overlap_weeks": 16, "total_actual": 11749352.0, "total_forecast": 12057781.24, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}}, "Transits": {"UK": {"mape": 20.32, "wmape": 21.58, "bias": -12.1, "accuracy": 78.42, "overlap_weeks": 16, "total_actual": 29632760.0, "total_forecast": 26047902.89, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "DE": {"mape": 31.96, "wmape": 32.04, "bias": 1.08, "accuracy": 67.96, "overlap_weeks": 16, "total_actual": 26200243.0, "total_forecast": 26483173.76, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "FR": {"mape": 36.35, "wmape": 35.34, "bias": -12.47, "accuracy": 64.66, "overlap_weeks": 16, "total_actual": 9025560.0, "total_forecast": 7899652.97, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "IT": {"mape": 31.58, "wmape": 32.05, "bias": -9.68, "accuracy": 67.95, "overlap_weeks": 16, "total_actual": 21514939.0, "total_forecast": 19432831.05, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "ES": {"mape": 37.9, "wmape": 41.68, "bias": -31.37, "accuracy": 58.32, "overlap_weeks": 16, "total_actual": 15738480.0, "total_forecast": 10801010.15, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "EU5": {"mape": 26.38, "wmape": 27.26, "bias": -11.21, "accuracy": 72.74, "overlap_weeks": 16, "total_actual": 102111982.0, "total_forecast": 90664570.82, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}}, "Transit Conversion": {"UK": {"mape": 19.84, "wmape": 19.36, "bias": -6.85, "accuracy": 80.64, "overlap_weeks": 16, "total_actual": 0.43, "total_forecast": 0.4, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "DE": {"mape": 43.74, "wmape": 40.07, "bias": 39.78, "accuracy": 59.93, "overlap_weeks": 16, "total_actual": 0.19, "total_forecast": 0.26, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "FR": {"mape": 50.0, "wmape": 39.63, "bias": 23.37, "accuracy": 60.37, "overlap_weeks": 16, "total_actual": 0.15, "total_forecast": 0.19, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "IT": {"mape": 35.88, "wmape": 35.2, "bias": -6.12, "accuracy": 64.8, "overlap_weeks": 16, "total_actual": 0.22, "total_forecast": 0.21, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "ES": {"mape": 42.89, "wmape": 43.84, "bias": -25.8, "accuracy": 56.16, "overlap_weeks": 16, "total_actual": 0.27, "total_forecast": 0.2, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "EU5": {"mape": 22.61, "wmape": 22.14, "bias": -0.12, "accuracy": 77.86, "overlap_weeks": 16, "total_actual": 0.25, "total_forecast": 0.25, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}}, "UPO": {"UK": {"mape": 16.34, "wmape": 15.42, "bias": 10.95, "accuracy": 84.58, "overlap_weeks": 16, "total_actual": 113.83, "total_forecast": 126.28, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "DE": {"mape": 47.69, "wmape": 43.08, "bias": 39.76, "accuracy": 56.92, "overlap_weeks": 16, "total_actual": 72.62, "total_forecast": 101.5, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "FR": {"mape": 75.68, "wmape": 55.56, "bias": 51.74, "accuracy": 44.44, "overlap_weeks": 16, "total_actual": 72.85, "total_forecast": 110.54, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "IT": {"mape": 16.56, "wmape": 16.67, "bias": 1.13, "accuracy": 83.33, "overlap_weeks": 16, "total_actual": 118.08, "total_forecast": 119.42, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "ES": {"mape": 34.83, "wmape": 29.94, "bias": 17.58, "accuracy": 70.06, "overlap_weeks": 16, "total_actual": 94.97, "total_forecast": 111.67, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}, "EU5": {"mape": 26.5, "wmape": 24.84, "bias": 20.55, "accuracy": 75.16, "overlap_weeks": 16, "total_actual": 94.47, "total_forecast": 113.88, "periods": ["2025-10-13", "2025-10-20", "2025-10-27", "2025-11-03", "2025-11-10", "2025-11-17", "2025-11-24", "2025-12-01", "2025-12-08", "2025-12-15", "2025-12-22", "2025-12-29", "2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "total"}}}, "t4w": {"Net Ordered Units": {"UK": {"mape": 18.1, "wmape": 16.0, "bias": 16.0, "accuracy": 84.0, "overlap_weeks": 4, "total_actual": 1155756.0, "total_forecast": 1340626.68, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "DE": {"mape": 138.19, "wmape": 131.15, "bias": 131.15, "accuracy": 0, "overlap_weeks": 4, "total_actual": 276248.0, "total_forecast": 638541.54, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "FR": {"mape": 190.68, "wmape": 172.98, "bias": 172.98, "accuracy": 0, "overlap_weeks": 4, "total_actual": 64861.0, "total_forecast": 177059.67, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "IT": {"mape": 17.97, "wmape": 17.1, "bias": -8.45, "accuracy": 82.9, "overlap_weeks": 4, "total_actual": 550625.0, "total_forecast": 504115.72, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "ES": {"mape": 50.05, "wmape": 50.57, "bias": -37.65, "accuracy": 49.43, "overlap_weeks": 4, "total_actual": 624632.0, "total_forecast": 389436.98, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "EU5": {"mape": 18.9, "wmape": 14.95, "bias": 14.13, "accuracy": 85.05, "overlap_weeks": 4, "total_actual": 2672122.0, "total_forecast": 3049780.58, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}}, "Transits": {"UK": {"mape": 11.68, "wmape": 11.91, "bias": 5.94, "accuracy": 88.09, "overlap_weeks": 4, "total_actual": 5130014.0, "total_forecast": 5434503.26, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "DE": {"mape": 43.12, "wmape": 43.2, "bias": 9.99, "accuracy": 56.8, "overlap_weeks": 4, "total_actual": 5575074.0, "total_forecast": 6131830.83, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "FR": {"mape": 42.42, "wmape": 40.52, "bias": 40.32, "accuracy": 59.48, "overlap_weeks": 4, "total_actual": 1687631.0, "total_forecast": 2368007.33, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "IT": {"mape": 32.49, "wmape": 33.66, "bias": 4.81, "accuracy": 66.34, "overlap_weeks": 4, "total_actual": 4522180.0, "total_forecast": 4739619.01, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "ES": {"mape": 27.94, "wmape": 30.65, "bias": -24.87, "accuracy": 69.35, "overlap_weeks": 4, "total_actual": 4548693.0, "total_forecast": 3417253.26, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "EU5": {"mape": 24.52, "wmape": 24.64, "bias": 2.92, "accuracy": 75.36, "overlap_weeks": 4, "total_actual": 21463592.0, "total_forecast": 22091213.68, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}}, "Transit Conversion": {"UK": {"mape": 13.6, "wmape": 13.63, "bias": -13.63, "accuracy": 86.37, "overlap_weeks": 4, "total_actual": 0.12, "total_forecast": 0.11, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "DE": {"mape": 38.62, "wmape": 30.32, "bias": 30.32, "accuracy": 69.68, "overlap_weeks": 4, "total_actual": 0.05, "total_forecast": 0.07, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "FR": {"mape": 27.8, "wmape": 25.21, "bias": 1.87, "accuracy": 74.79, "overlap_weeks": 4, "total_actual": 0.04, "total_forecast": 0.04, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "IT": {"mape": 30.65, "wmape": 33.96, "bias": -30.85, "accuracy": 66.04, "overlap_weeks": 4, "total_actual": 0.07, "total_forecast": 0.05, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "ES": {"mape": 34.15, "wmape": 50.56, "bias": -49.87, "accuracy": 49.44, "overlap_weeks": 4, "total_actual": 0.11, "total_forecast": 0.05, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "EU5": {"mape": 20.39, "wmape": 23.34, "bias": -19.03, "accuracy": 76.66, "overlap_weeks": 4, "total_actual": 0.08, "total_forecast": 0.06, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}}, "UPO": {"UK": {"mape": 28.29, "wmape": 28.12, "bias": 28.12, "accuracy": 71.88, "overlap_weeks": 4, "total_actual": 28.76, "total_forecast": 36.85, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "DE": {"mape": 53.78, "wmape": 53.39, "bias": 53.39, "accuracy": 46.61, "overlap_weeks": 4, "total_actual": 15.39, "total_forecast": 23.6, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "FR": {"mape": 87.81, "wmape": 87.54, "bias": 87.54, "accuracy": 12.46, "overlap_weeks": 4, "total_actual": 16.5, "total_forecast": 30.95, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "IT": {"mape": 19.92, "wmape": 19.92, "bias": 19.92, "accuracy": 80.08, "overlap_weeks": 4, "total_actual": 30.18, "total_forecast": 36.19, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "ES": {"mape": 48.79, "wmape": 41.1, "bias": 41.1, "accuracy": 58.9, "overlap_weeks": 4, "total_actual": 23.04, "total_forecast": 32.51, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}, "EU5": {"mape": 40.64, "wmape": 40.6, "bias": 40.6, "accuracy": 59.4, "overlap_weeks": 4, "total_actual": 22.77, "total_forecast": 32.02, "periods": ["2026-01-05", "2026-01-12", "2026-01-19", "2026-01-26"], "timeframe": "t4w"}}}, "cw": {"Net Ordered Units": {"UK": {"mape": 6.4, "wmape": 6.4, "bias": 6.4, "accuracy": 93.6, "overlap_weeks": 1, "total_actual": 250690.0, "total_forecast": 266743.74, "periods": ["2026-01-26"], "timeframe": "cw"}, "DE": {"mape": 59.71, "wmape": 59.71, "bias": 59.71, "accuracy": 40.29, "overlap_weeks": 1, "total_actual": 61256.0, "total_forecast": 97830.55, "periods": ["2026-01-26"], "timeframe": "cw"}, "FR": {"mape": 161.81, "wmape": 161.81, "bias": 161.81, "accuracy": 0, "overlap_weeks": 1, "total_actual": 12187.0, "total_forecast": 31906.46, "periods": ["2026-01-26"], "timeframe": "cw"}, "IT": {"mape": 26.57, "wmape": 26.57, "bias": -26.57, "accuracy": 73.43, "overlap_weeks": 1, "total_actual": 110625.0, "total_forecast": 81227.27, "periods": ["2026-01-26"], "timeframe": "cw"}, "ES": {"mape": 50.53, "wmape": 50.53, "bias": -50.53, "accuracy": 49.47, "overlap_weeks": 1, "total_actual": 97704.0, "total_forecast": 48331.82, "periods": ["2026-01-26"], "timeframe": "cw"}, "EU5": {"mape": 1.21, "wmape": 1.21, "bias": -1.21, "accuracy": 98.79, "overlap_weeks": 1, "total_actual": 532462.0, "total_forecast": 526039.85, "periods": ["2026-01-26"], "timeframe": "cw"}}, "Transits": {"UK": {"mape": 0.46, "wmape": 0.46, "bias": -0.46, "accuracy": 99.54, "overlap_weeks": 1, "total_actual": 1194077.0, "total_forecast": 1188530.42, "periods": ["2026-01-26"], "timeframe": "cw"}, "DE": {"mape": 46.99, "wmape": 46.99, "bias": -46.99, "accuracy": 53.01, "overlap_weeks": 1, "total_actual": 1970459.0, "total_forecast": 1044535.64, "periods": ["2026-01-26"], "timeframe": "cw"}, "FR": {"mape": 0.36, "wmape": 0.36, "bias": -0.36, "accuracy": 99.64, "overlap_weeks": 1, "total_actual": 478066.0, "total_forecast": 476363.99, "periods": ["2026-01-26"], "timeframe": "cw"}, "IT": {"mape": 43.41, "wmape": 43.41, "bias": -43.41, "accuracy": 56.59, "overlap_weeks": 1, "total_actual": 1502666.0, "total_forecast": 850374.0, "periods": ["2026-01-26"], "timeframe": "cw"}, "ES": {"mape": 55.36, "wmape": 55.36, "bias": -55.36, "accuracy": 44.64, "overlap_weeks": 1, "total_actual": 1345573.0, "total_forecast": 600687.22, "periods": ["2026-01-26"], "timeframe": "cw"}, "EU5": {"mape": 35.9, "wmape": 35.9, "bias": -35.9, "accuracy": 64.1, "overlap_weeks": 1, "total_actual": 6490841.0, "total_forecast": 4160491.27, "periods": ["2026-01-26"], "timeframe": "cw"}}, "Transit Conversion": {"UK": {"mape": 14.71, "wmape": 14.71, "bias": -14.71, "accuracy": 85.29, "overlap_weeks": 1, "total_actual": 0.03, "total_forecast": 0.03, "periods": ["2026-01-26"], "timeframe": "cw"}, "DE": {"mape": 98.87, "wmape": 98.87, "bias": 98.87, "accuracy": 1.13, "overlap_weeks": 1, "total_actual": 0.01, "total_forecast": 0.02, "periods": ["2026-01-26"], "timeframe": "cw"}, "FR": {"mape": 44.09, "wmape": 44.09, "bias": 44.09, "accuracy": 55.91, "overlap_weeks": 1, "total_actual": 0.01, "total_forecast": 0.01, "periods": ["2026-01-26"], "timeframe": "cw"}, "IT": {"mape": 10.43, "wmape": 10.43, "bias": 10.43, "accuracy": 89.57, "overlap_weeks": 1, "total_actual": 0.01, "total_forecast": 0.01, "periods": ["2026-01-26"], "timeframe": "cw"}, "ES": {"mape": 0.07, "wmape": 0.07, "bias": -0.07, "accuracy": 99.93, "overlap_weeks": 1, "total_actual": 0.01, "total_forecast": 0.01, "periods": ["2026-01-26"], "timeframe": "cw"}, "EU5": {"mape": 11.82, "wmape": 11.82, "bias": 11.82, "accuracy": 88.18, "overlap_weeks": 1, "total_actual": 0.01, "total_forecast": 0.01, "periods": ["2026-01-26"], "timeframe": "cw"}}, "UPO": {"UK": {"mape": 25.33, "wmape": 25.33, "bias": 25.33, "accuracy": 74.67, "overlap_weeks": 1, "total_actual": 7.0, "total_forecast": 8.77, "periods": ["2026-01-26"], "timeframe": "cw"}, "DE": {"mape": 51.49, "wmape": 51.49, "bias": 51.49, "accuracy": 48.51, "overlap_weeks": 1, "total_actual": 3.71, "total_forecast": 5.62, "periods": ["2026-01-26"], "timeframe": "cw"}, "FR": {"mape": 82.35, "wmape": 82.35, "bias": 82.35, "accuracy": 17.65, "overlap_weeks": 1, "total_actual": 4.04, "total_forecast": 7.37, "periods": ["2026-01-26"], "timeframe": "cw"}, "IT": {"mape": 17.49, "wmape": 17.49, "bias": 17.49, "accuracy": 82.51, "overlap_weeks": 1, "total_actual": 7.33, "total_forecast": 8.62, "periods": ["2026-01-26"], "timeframe": "cw"}, "ES": {"mape": 10.88, "wmape": 10.88, "bias": 10.88, "accuracy": 89.12, "overlap_weeks": 1, "total_actual": 6.98, "total_forecast": 7.74, "periods": ["2026-01-26"], "timeframe": "cw"}, "EU5": {"mape": 31.15, "wmape": 31.15, "bias": 31.15, "accuracy": 68.85, "overlap_weeks": 1, "total_actual": 5.81, "total_forecast": 7.62, "periods": ["2026-01-26"], "timeframe": "cw"}}}};
+        const latestWeekData = {"latest_week": "Wk 5 2026", "latest_date": "2026-01-26", "data": {"UK": {"Net Ordered Units": {"actual": 250690.0, "manual_forecast": 266743.7434736903, "manual_dev": -16053.7435, "manual_dev_pct": -6.0}, "Transits": {"actual": 1194077.0, "manual_forecast": 1188530.4222222222, "manual_dev": 5546.5778, "manual_dev_pct": 0.5}, "Transit Conversion": {"actual": 0.02999304064980734, "manual_forecast": 0.025582525859249354, "manual_dev": 0.0044, "manual_dev_pct": 17.2}, "UPO": {"actual": 6.999776623666722, "manual_forecast": 8.772846234097507, "manual_dev": -1.7731, "manual_dev_pct": -20.2}}, "DE": {"Net Ordered Units": {"actual": 61256.0, "manual_forecast": 97830.55172772995, "manual_dev": -36574.5517, "manual_dev_pct": -37.4}, "Transits": {"actual": 1970459.0, "manual_forecast": 1044535.6418844444, "manual_dev": 925923.3581, "manual_dev_pct": 88.6}, "Transit Conversion": {"actual": 0.008379773443649425, "manual_forecast": 0.016665091291966784, "manual_dev": -0.0083, "manual_dev_pct": -49.7}, "UPO": {"actual": 3.709786821705426, "manual_forecast": 5.620093515158434, "manual_dev": -1.9103, "manual_dev_pct": -34.0}}, "FR": {"Net Ordered Units": {"actual": 12187.0, "manual_forecast": 31906.460200202462, "manual_dev": -19719.4602, "manual_dev_pct": -61.8}, "Transits": {"actual": 478066.0, "manual_forecast": 476363.98688, "manual_dev": 1702.0131, "manual_dev_pct": 0.4}, "Transit Conversion": {"actual": 0.006308752348002158, "manual_forecast": 0.009090339938992048, "manual_dev": -0.0028, "manual_dev_pct": -30.6}, "UPO": {"actual": 4.040782493368701, "manual_forecast": 7.368169013377037, "manual_dev": -3.3274, "manual_dev_pct": -45.2}}, "IT": {"Net Ordered Units": {"actual": 110625.0, "manual_forecast": 81227.27002858205, "manual_dev": 29397.73, "manual_dev_pct": 36.2}, "Transits": {"actual": 1502666.0, "manual_forecast": 850374.0003200001, "manual_dev": 652291.9997, "manual_dev_pct": 76.7}, "Transit Conversion": {"actual": 0.01003882432955826, "manual_forecast": 0.011086078152387291, "manual_dev": -0.001, "manual_dev_pct": -9.4}, "UPO": {"actual": 7.333443818362612, "manual_forecast": 8.616163826149936, "manual_dev": -1.2827, "manual_dev_pct": -14.9}}, "ES": {"Net Ordered Units": {"actual": 97704.0, "manual_forecast": 48331.82162570735, "manual_dev": 49372.1784, "manual_dev_pct": 102.2}, "Transits": {"actual": 1345573.0, "manual_forecast": 600687.2169600001, "manual_dev": 744885.783, "manual_dev_pct": 124.0}, "Transit Conversion": {"actual": 0.01040225985509519, "manual_forecast": 0.010395375027810762, "manual_dev": 0.0, "manual_dev_pct": 0.1}, "UPO": {"actual": 6.980352932771308, "manual_forecast": 7.740065079538069, "manual_dev": -0.7597, "manual_dev_pct": -9.8}}, "EU5": {"Net Ordered Units": {"actual": 532462.0, "manual_forecast": 526039.8470559121, "manual_dev": 6422.1529, "manual_dev_pct": 1.2}, "Transits": {"actual": 6490841.0, "manual_forecast": 4160491.2682666667, "manual_dev": 2330349.7317, "manual_dev_pct": 56.0}, "Transit Conversion": {"actual": 0.013024530125222472, "manual_forecast": 0.014563882054081248, "manual_dev": -0.0015, "manual_dev_pct": -10.6}, "UPO": {"actual": 5.812828537974953, "manual_forecast": 7.623467533664197, "manual_dev": -1.8106, "manual_dev_pct": -23.8}}}};
+        const promoData = {"UK": {"Wk21 2025": 1.0, "Wk22 2025": 1.0, "Wk23 2025": 1.0, "Wk24 2025": 0.0, "Wk25 2025": 1.0, "Wk26 2025": 1.0, "Wk27 2025": 0.0, "Wk28 2025": 1.0, "Wk29 2025": 0.0, "Wk30 2025": 1.0, "Wk31 2025": 1.0, "Wk32 2025": 1.8, "Wk33 2025": 1.8, "Wk34 2025": 1.0, "Wk35 2025": 1.0, "Wk36 2025": 1.4, "Wk37 2025": 1.4, "Wk38 2025": 1.0, "Wk39 2025": 1.4, "Wk40 2025": 1.4, "Wk41 2025": 2.6, "Wk42 2025": 1.0, "Wk43 2025": 1.4, "Wk44 2025": 1.4, "Wk45 2025": 1.0, "Wk46 2025": 5.0, "Wk47 2025": 2.6, "Wk48 2025": 2.6, "Wk50 2025": 2.3, "Wk51 2025": 2.6, "Wk01 2026": 1.4, "Wk02 2026": 1.5, "Wk03 2026": 1.4, "Wk04 2026": 1.5, "Wk05 2026": 1.4, "Wk06 2026": 1.5, "Wk07 2026": 1.4, "Wk08 2026": 1.5, "Wk64 2026": 1.4, "Wk09 2026": 1.5}, "DE": {"Wk25 2025": 1.4, "Wk26 2025": 1.4, "Wk27 2025": 0.0, "Wk28 2025": 1.0, "Wk29 2025": 0.0, "Wk30 2025": 1.0, "Wk31 2025": 1.0, "Wk32 2025": 2.6, "Wk33 2025": 2.6, "Wk34 2025": 1.0, "Wk35 2025": 2.2, "Wk36 2025": 3.0, "Wk37 2025": 2.2, "Wk38 2025": 1.0, "Wk39 2025": 1.4, "Wk40 2025": 1.4, "Wk41 2025": 5.0, "Wk42 2025": 1.0, "Wk43 2025": 2.2, "Wk44 2025": 2.2, "Wk45 2025": 1.0, "Wk46 2025": 3.0, "Wk47 2025": 1.8, "Wk48 2025": 1.8, "Wk50 2025": 2.3, "Wk51 2025": 2.6, "Wk01 2026": 1.4, "Wk02 2026": 1.5, "Wk03 2026": 1.4, "Wk04 2026": 1.5, "Wk05 2026": 1.4, "Wk06 2026": 1.5, "Wk07 2026": 1.4, "Wk08 2026": 1.5, "Wk64 2026": 1.4, "Wk09 2026": 1.5}, "FR": {"Wk40 2025": 1.4, "Wk41 2025": 2.6, "Wk42 2025": 1.0, "Wk43 2025": 1.4, "Wk44 2025": 1.4, "Wk45 2025": 1.0, "Wk46 2025": 5.0, "Wk47 2025": 1.8, "Wk48 2025": 2.2, "Wk50 2025": 2.3, "Wk51 2025": 2.6, "Wk01 2026": 1.4, "Wk02 2026": 1.5, "Wk03 2026": 1.4, "Wk04 2026": 1.5, "Wk05 2026": 1.4, "Wk06 2026": 1.5, "Wk07 2026": 1.4, "Wk08 2026": 1.5, "Wk64 2026": 1.4, "Wk09 2026": 1.5}, "IT": {"Wk40 2025": 1.0, "Wk41 2025": 1.4, "Wk42 2025": 1.0, "Wk43 2025": 1.0, "Wk44 2025": 1.0, "Wk45 2025": 1.0, "Wk46 2025": 5.0, "Wk47 2025": 2.2, "Wk48 2025": 2.2, "Wk50 2025": 2.3, "Wk51 2025": 2.6, "Wk01 2026": 1.4, "Wk02 2026": 1.5, "Wk03 2026": 1.4, "Wk04 2026": 1.5, "Wk05 2026": 1.4, "Wk06 2026": 1.5, "Wk07 2026": 1.4, "Wk08 2026": 1.5, "Wk64 2026": 1.4, "Wk09 2026": 1.5}, "ES": {"Wk40 2025": 1.0, "Wk41 2025": 1.4, "Wk42 2025": 1.0, "Wk43 2025": 1.0, "Wk44 2025": 1.0, "Wk45 2025": 1.0, "Wk46 2025": 5.0, "Wk47 2025": 2.2, "Wk48 2025": 2.6, "Wk50 2025": 2.3, "Wk51 2025": 2.6, "Wk01 2026": 1.4, "Wk02 2026": 1.5, "Wk03 2026": 1.4, "Wk04 2026": 1.5, "Wk05 2026": 1.4, "Wk06 2026": 1.5, "Wk07 2026": 1.4, "Wk08 2026": 1.5, "Wk64 2026": 1.4, "Wk09 2026": 1.5}, "EU5": {"Wk45 2025": 1.0, "Wk43 2025": 1.4, "Wk51 2025": 2.6, "Wk42 2025": 1.0, "Wk50 2025": 2.3, "Wk09 2026": 1.5, "Wk06 2026": 1.5, "Wk40 2025": 1.24, "Wk03 2026": 1.4, "Wk47 2025": 2.12, "Wk05 2026": 1.4, "Wk46 2025": 4.6, "Wk01 2026": 1.4, "Wk04 2026": 1.5, "Wk02 2026": 1.5, "Wk41 2025": 2.6, "Wk64 2026": 1.4, "Wk08 2026": 1.5, "Wk07 2026": 1.4, "Wk44 2025": 1.4, "Wk48 2025": 2.28}};
+        const hasManualForecast = true;
+        
+        const METRICS = ['Net Ordered Units', 'Transits', 'Transit Conversion', 'UPO'];
+        const MARKETPLACES = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
+        const MP_COLORS = {'EU5':'#667eea','UK':'#ff9900','DE':'#00d9ff','FR':'#ff6b9d','IT':'#00e676','ES':'#ffeb3b'};
+        
+        let currentMetric = 'Net Ordered Units';
+        let currentStatsView = 'total';
+        let showManualForecast = true;
+        let selectedMarketplaces = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
+        
+        // Helper function to resize all Plotly charts after DOM updates
+        function resizeAllCharts() {
+            setTimeout(function() {
+                document.querySelectorAll('[id^="chart-"]').forEach(function(el) {
+                    if(el && el.data) {
+                        Plotly.Plots.resize(el);
+                    }
+                });
+                // Also resize deviation chart
+                const devChart = document.getElementById('deviationChart');
+                if(devChart && devChart.data) {
+                    Plotly.Plots.resize(devChart);
+                }
+            }, 100);
+        }
+        
+        // Theme Toggle
+        document.getElementById('themeToggle').addEventListener('click', function() {
+            const html = document.documentElement;
+            const current = html.getAttribute('data-theme');
+            html.setAttribute('data-theme', current === 'light' ? '' : 'light');
+            document.getElementById('darkIcon').classList.toggle('active');
+            document.getElementById('lightIcon').classList.toggle('active');
+        });
+        
+        // Tab Navigation
+        document.querySelectorAll('.tab-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                this.classList.add('active');
+                document.getElementById('tab-' + this.dataset.tab).classList.add('active');
+                // Resize charts when switching tabs
+                resizeAllCharts();
+            });
+        });
+        
+        // Metric Select
+        document.getElementById('metricSelect').addEventListener('change', function() {
+            currentMetric = this.value;
+            document.getElementById('currentMetricLabel').textContent = currentMetric;
+            updateDashboard();
+            resizeAllCharts();
+        });
+        
+        // Manual Forecast Toggle
+        document.getElementById('manualForecastToggle').addEventListener('change', function() {
+            showManualForecast = this.checked;
+            updateCharts();
+            resizeAllCharts();
+        });
+        
+        // Marketplace Checkboxes
+        document.querySelectorAll('.mp-checkbox').forEach(cb => {
+            cb.addEventListener('change', function() {
+                selectedMarketplaces = Array.from(document.querySelectorAll('.mp-checkbox:checked')).map(c => c.value);
+                updateDashboard();
+                resizeAllCharts();
+            });
+        });
+        
+        // Stats Toggle - also update accuracy and charts
+        document.querySelectorAll('.stats-toggle-btn').forEach(btn => {
+            btn.addEventListener('click', function() {
+                document.querySelectorAll('.stats-toggle-btn').forEach(b => b.classList.remove('active'));
+                this.classList.add('active');
+                currentStatsView = this.dataset.view;
+                updateStats();
+                updateAccuracy();
+                updateCharts();
+                resizeAllCharts();
+            });
+        });
+        
+        // Deviation Selects
+        document.getElementById('deviationMetricSelect').addEventListener('change', function() {
+            updateDeviations();
+            resizeAllCharts();
+        });
+        document.getElementById('deviationMpSelect').addEventListener('change', function() {
+            updateDeviations();
+            resizeAllCharts();
+        });
+        
+        function formatValue(v, m) {
+            if(v==null||v==undefined||isNaN(v)) return '-';
+            if(m==='Transit Conversion') return (v*100).toFixed(2)+'%';
+            if(m==='UPO') return v.toFixed(2);
+            return Math.round(v).toLocaleString();
+        }
+        
+        function getDevClass(dev) {
+            if(dev===null||dev===undefined) return '';
+            const abs = Math.abs(dev);
+            if(abs<20) return 'dev-green';
+            if(abs<30) return 'dev-yellow';
+            return 'dev-red';
+        }
+        
+        function updateStats() {
+            const grid = document.getElementById('statsGrid');
+            grid.innerHTML = '';
+            
+            const viewLabels = { total: 'Total', t4w: 'T4W', cw: 'CW' };
+            const currentViewLabel = viewLabels[currentStatsView] || 'Total';
+            
+            selectedMarketplaces.forEach(mp => {
+                const stats = statisticsData[currentMetric] && statisticsData[currentMetric][mp];
+                if(!stats) return;
+                
+                let primaryValue, avgValue, minValue, maxValue;
+                if(currentStatsView === 'total') {
+                    primaryValue = stats.total;
+                    avgValue = stats.average;
+                    minValue = stats.min;
+                    maxValue = stats.max;
+                } else if(currentStatsView === 't4w') {
+                    primaryValue = stats.t4w_total;
+                    avgValue = stats.t4w_avg;
+                    minValue = stats.t4w_min;
+                    maxValue = stats.t4w_max;
+                } else {
+                    primaryValue = stats.cw_value;
+                    avgValue = stats.cw_value;
+                    minValue = stats.cw_value;
+                    maxValue = stats.cw_value;
+                }
+                
+                const card = document.createElement('div');
+                card.className = 'stat-card';
+                card.innerHTML = `
+                    <div class="stat-card-header">
+                        <h4>${mp}</h4>
+                        <div class="mp-flag ${mp.toLowerCase()}">${mp}</div>
+                    </div>
+                    <div class="stat-card-body">
+                        <div class="stat-item"><div class="value">${formatValue(primaryValue, currentMetric)}</div><div class="label">${currentViewLabel} Total</div></div>
+                        <div class="stat-item"><div class="value">${formatValue(avgValue, currentMetric)}</div><div class="label">${currentViewLabel} Avg</div></div>
+                        <div class="stat-item"><div class="value">${formatValue(minValue, currentMetric)}</div><div class="label">Min</div></div>
+                        <div class="stat-item"><div class="value">${formatValue(maxValue, currentMetric)}</div><div class="label">Max</div></div>
+                    </div>
+                `;
+                grid.appendChild(card);
+            });
+        }
+        
+        function updateAccuracy() {
+            // Accuracy panel was removed - WMAPE now shown on chart cards
+            // This function is kept for compatibility but does nothing
+        }
+        
+        function updateCharts() {
+            const grid = document.getElementById('chartsGrid');
+            grid.innerHTML = '';
+            
+            selectedMarketplaces.forEach(mp => {
+                const metricData = dashboardData[currentMetric];
+                if(!metricData || !metricData[mp]) return;
+                
+                const mpData = metricData[mp];
+                const forecast = forecastsData[currentMetric] && forecastsData[currentMetric][mp];
+                
+                const card = document.createElement('div');
+                card.className = 'chart-card';
+                const chartId = 'chart-' + mp;
+                card.innerHTML = `
+                    <div class="chart-card-header">
+                        <h4><div class="chart-icon" style="background:${MP_COLORS[mp]}">${mp}</div>${mp} - ${currentMetric}</h4>
+                    </div>
+                    <div class="chart-container"><div id="${chartId}" style="height:350px;"></div></div>
+                `;
+                grid.appendChild(card);
+                
+                // Get actual container width for proper sizing
+                const containerEl = card.querySelector('.chart-container');
+                const containerWidth = containerEl ? containerEl.offsetWidth : 300;
+                
+                // Build traces - filter to only show weeks with actual data
+                const traces = [];
+                
+                // Historical data - filter out null/NaN values
+                const allWeeks = mpData.weeks || [];
+                const allValues = mpData.values || [];
+                const validIndices = [];
+                allValues.forEach((v, i) => {
+                    if(v != null && !isNaN(v)) validIndices.push(i);
+                });
+                const weeks = validIndices.map(i => allWeeks[i]);
+                const values = validIndices.map(i => allValues[i]);
+                
+                // Set to track the valid week range (from actuals) - used to constrain other traces
+                const validWeekSet = new Set(weeks);
+                const firstActualWeek = weeks[0];
+                const lastActualWeek = weeks[weeks.length - 1];
+                
+                traces.push({
+                    x: weeks,
+                    y: values,
+                    name: 'Actual',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: MP_COLORS[mp], width: 2 },
+                    marker: { size: 6 }
+                });
+                
+                // Manual forecast - only show weeks that are within or after the actuals range
+                if(hasManualForecast && showManualForecast && mpData.manual_forecast) {
+                    const mfWeeks = mpData.manual_weeks || [];
+                    const mfValues = mpData.manual_forecast || [];
+                    
+                    // Filter to valid values AND weeks that overlap with or extend from actuals
+                    const filteredMfWeeks = [];
+                    const filteredMfValues = [];
+                    mfWeeks.forEach((wk, i) => {
+                        const val = mfValues[i];
+                        if(val != null && !isNaN(val)) {
+                            // Only include if week is in actuals range OR after actuals end
+                            if(validWeekSet.has(wk) || weeks.indexOf(wk) === -1) {
+                                // Check if this week comes after the first actual week
+                                const mfWeekIdx = allWeeks.indexOf(wk);
+                                const firstActualIdx = allWeeks.indexOf(firstActualWeek);
+                                if(mfWeekIdx >= firstActualIdx) {
+                                    filteredMfWeeks.push(wk);
+                                    filteredMfValues.push(val);
+                                }
+                            }
+                        }
+                    });
+                    
+                    if(filteredMfWeeks.length > 0) {
+                        traces.push({
+                            x: filteredMfWeeks,
+                            y: filteredMfValues,
+                            name: 'Manual FC',
+                            type: 'scatter',
+                            mode: 'lines+markers',
+                            line: { color: '#9c27b0', width: 2, dash: 'dot' },
+                            marker: { size: 5 }
+                        });
+                    }
+                }
+                
+                // Model forecast
+                if(forecast) {
+                    const fcWeeks = forecast.dates.map(d => {
+                        const date = new Date(d);
+                        const y = date.getFullYear();
+                        const start = new Date(y,0,1);
+                        const days = Math.floor((date-start)/(24*60*60*1000));
+                        const w = Math.ceil((days+start.getDay()+1)/7);
+                        return 'Wk'+w.toString().padStart(2,'0')+' '+y;
+                    });
+                    
+                    traces.push({
+                        x: fcWeeks,
+                        y: forecast.values,
+                        name: 'Model FC',
+                        type: 'scatter',
+                        mode: 'lines+markers',
+                        line: { color: '#ff9900', width: 2, dash: 'dash' },
+                        marker: { size: 5 }
+                    });
+                    
+                    // Confidence interval
+                    traces.push({
+                        x: fcWeeks.concat(fcWeeks.slice().reverse()),
+                        y: forecast.upper_bound.concat(forecast.lower_bound.slice().reverse()),
+                        fill: 'toself',
+                        fillcolor: 'rgba(255,153,0,0.1)',
+                        line: { color: 'transparent' },
+                        name: '85% CI',
+                        showlegend: false,
+                        hoverinfo: 'skip'
+                    });
+                }
+                
+                // Calculate Y-axis range based on historical + manual forecast ONLY
+                const scaleValues = [...values];
+                if(hasManualForecast && mpData.manual_forecast) {
+                    scaleValues.push(...mpData.manual_forecast.filter(v => v != null && !isNaN(v)));
+                }
+                const yMax = scaleValues.length > 0 ? Math.max(...scaleValues) * 1.15 : 100;
+                
+                // Shorten week labels for better fit: "Wk01 2025" -> "W01"
+                const shortWeeks = weeks.map((w, i) => {
+                    // Simple extraction: "Wk01 2025" -> "W01"
+                    const parts = w.split(' ');
+                    if(parts.length >= 1) {
+                        const wkPart = parts[0].replace('Wk', 'W');
+                        // Show year at first, last, and every 10th week
+                        if(parts.length >= 2 && (i === 0 || i === weeks.length - 1 || i % 10 === 0)) {
+                            return wkPart + "'" + parts[1].slice(-2);
+                        }
+                        return wkPart;
+                    }
+                    return w;
+                });
+                
+                // Build x-axis category list: actuals weeks + future weeks (from Manual FC and Model FC)
+                const xAxisCategories = [...weeks];
+                
+                // Add Manual FC weeks that extend beyond actuals (future forecasts)
+                if(hasManualForecast && mpData.manual_weeks) {
+                    const mfWeeks = mpData.manual_weeks || [];
+                    const mfValues = mpData.manual_forecast || [];
+                    mfWeeks.forEach((wk, i) => {
+                        const val = mfValues[i];
+                        if(val != null && !isNaN(val) && !xAxisCategories.includes(wk)) {
+                            // Only add if week is AFTER the last actual week (future forecast)
+                            const wkIdx = mpData.weeks.indexOf(wk);
+                            const lastActualIdx = mpData.weeks.indexOf(lastActualWeek);
+                            if(wkIdx > lastActualIdx || wkIdx === -1) {
+                                xAxisCategories.push(wk);
+                            }
+                        }
+                    });
+                }
+                
+                // Add Model FC weeks that extend beyond actuals
+                if(forecast) {
+                    const fcWeeks = forecast.dates.map(d => {
+                        const date = new Date(d);
+                        const y = date.getFullYear();
+                        const start = new Date(y,0,1);
+                        const days = Math.floor((date-start)/(24*60*60*1000));
+                        const w = Math.ceil((days+start.getDay()+1)/7);
+                        return 'Wk'+w.toString().padStart(2,'0')+' '+y;
+                    });
+                    fcWeeks.forEach(fw => {
+                        if(!xAxisCategories.includes(fw)) xAxisCategories.push(fw);
+                    });
+                }
+                
+                // Calculate tick skip based on FULL data length including forecasts
+                const fullDataLen = xAxisCategories.length;
+                let tickSkip = 1;
+                if(fullDataLen > 40) tickSkip = 5;
+                else if(fullDataLen > 30) tickSkip = 4;
+                else if(fullDataLen > 15) tickSkip = 2;
+                
+                // Select ticks to show (first, every Nth, last) - for full range including forecasts
+                const tickVals = [];
+                const tickText = [];
+                xAxisCategories.forEach((w, i) => {
+                    if(i === 0 || i === xAxisCategories.length - 1 || i % tickSkip === 0) {
+                        tickVals.push(w);
+                        tickText.push(w);
+                    }
+                });
+                
+                // Debug: log xAxisCategories for first marketplace
+                if(mp === 'EU5') console.log('EU5 xAxisCategories:', xAxisCategories.length, 'weeks from', xAxisCategories[0], 'to', xAxisCategories[xAxisCategories.length-1]);
+                
+                const layout = {
+                    margin: { t: 10, r: 20, b: 70, l: 60 },
+                    paper_bgcolor: 'transparent',
+                    plot_bgcolor: 'transparent',
+                    font: { color: '#8892b0', family: 'Inter', size: 10 },
+                    xaxis: { 
+                        gridcolor: 'rgba(255,255,255,0.1)', 
+                        tickangle: -45, 
+                        tickfont: { size: 9 },
+                        type: 'category',
+                        categoryorder: 'array',
+                        categoryarray: xAxisCategories,
+                        range: [-0.5, xAxisCategories.length - 0.5]
+                    },
+                    yaxis: { 
+                        gridcolor: 'rgba(255,255,255,0.1)', 
+                        tickfont: { size: 9 },
+                        tickformat: currentMetric === 'Transit Conversion' ? '.2%' : '.2s',
+                        automargin: true,
+                        range: [0, yMax],
+                        autorange: false
+                    },
+                    legend: { orientation: 'h', y: -0.25, x: 0.5, xanchor: 'center', font: { size: 10 } },
+                    showlegend: true,
+                    hovermode: 'x unified',
+                    dragmode: 'pan'
+                };
+                
+                const config = {
+                    responsive: true,
+                    displayModeBar: true,
+                    modeBarButtonsToInclude: ['zoom2d', 'pan2d', 'resetScale2d', 'zoomIn2d', 'zoomOut2d'],
+                    displaylogo: false
+                };
+                
+                Plotly.newPlot(chartId, traces, layout, config).then(function() {
+                    // Trigger autoscale after initial render to fit all data
+                    Plotly.relayout(chartId, {'xaxis.autorange': true});
+                });
+                
+                // Add forecast stats below chart (including accuracy)
+                const statsDiv = document.createElement('div');
+                statsDiv.className = 'forecast-stats';
+                
+                let statsHtml = '';
+                
+                // Model FC stats
+                if(forecast) {
+                    let fcVals = forecast.values;
+                    let viewLabel = 'Total';
+                    if(currentStatsView === 'cw') { fcVals = fcVals.slice(0,1); viewLabel = 'CW'; }
+                    else if(currentStatsView === 't4w') { fcVals = fcVals.slice(0,4); viewLabel = 'T4W'; }
+                    const fcTotal = fcVals.reduce((a,b) => a+b, 0);
+                    const fcAvg = fcTotal / fcVals.length;
+                    const modelName = forecast.model || 'SARIMAX';
+                    statsHtml += '<div class="forecast-stat"><div class="value">' + formatValue(fcTotal, currentMetric) + '</div><div class="label">Model FC ' + viewLabel + '</div></div>' +
+                        '<div class="forecast-stat"><div class="value">' + formatValue(fcAvg, currentMetric) + '</div><div class="label">' + viewLabel + ' Avg</div></div>' +
+                        '<div class="forecast-stat"><div class="value">' + modelName + '</div><div class="label">Model</div></div>';
+                }
+                
+                // Add Manual FC Accuracy (WMAPE only) to the card - uses timeframe-based data
+                if(hasManualForecast && accuracyData && accuracyData[currentStatsView] && accuracyData[currentStatsView][currentMetric] && accuracyData[currentStatsView][currentMetric][mp]) {
+                    const acc = accuracyData[currentStatsView][currentMetric][mp];
+                    if(acc && acc.wmape !== null) {
+                        const wmape = acc.wmape;
+                        const accCls = wmape < 20 ? 'good' : (wmape < 30 ? 'medium' : 'poor');
+                        statsHtml += '<div class="forecast-stat"><div class="value accuracy-' + accCls + '">' + wmape.toFixed(1) + '%</div><div class="label">WMAPE</div></div>';
+                    }
+                }
+                
+                statsDiv.innerHTML = statsHtml;
+                card.appendChild(statsDiv);
+            });
+        }
+        
+        function updateLatestWeek() {
+            if(!latestWeekData || !latestWeekData.data) return;
+            document.getElementById('latestWeekLabel').textContent = latestWeekData.latest_week || '--';
+            const tbody = document.getElementById('latestWeekTableBody');
+            tbody.innerHTML = '';
+            MARKETPLACES.forEach(mp => {
+                const mpData = latestWeekData.data[mp];
+                if(!mpData) return;
+                let row = '<tr><td class="mp-cell"><div class="mp-flag ' + mp.toLowerCase() + '">' + mp + '</div></td>';
+                METRICS.forEach(m => {
+                    const d = mpData[m] || {};
+                    const actual = formatValue(d.actual, m);
+                    const fc = d.manual_forecast !== null ? formatValue(d.manual_forecast, m) : '-';
+                    const dev = d.manual_dev_pct;
+                    const devCls = getDevClass(dev);
+                    const devStr = dev !== null ? (dev > 0 ? '+' : '') + dev.toFixed(1) + '%' : '-';
+                    row += '<td class="value-cell">' + actual + '</td><td class="forecast-cell">' + fc + '</td><td class="deviation-cell ' + devCls + '">' + devStr + '</td>';
+                });
+                row += '</tr>';
+                tbody.innerHTML += row;
+            });
+        }
+        
+        function updateDeviations() {
+            const metric = document.getElementById('deviationMetricSelect').value;
+            const mp = document.getElementById('deviationMpSelect').value;
+            const mData = dashboardData[metric] && dashboardData[metric][mp];
+            if(!mData) return;
+            
+            const allWeeks = mData.weeks || [];
+            const allActuals = mData.values || [];
+            const manualFc = mData.manual_forecast || [];
+            const manualWeeks = mData.manual_weeks || [];
+            
+            // Filter to only valid actuals
+            const validIndices = [];
+            allActuals.forEach((v, i) => {
+                if(v != null && !isNaN(v)) validIndices.push(i);
+            });
+            const weeks = validIndices.map(i => allWeeks[i]);
+            const actuals = validIndices.map(i => allActuals[i]);
+            
+            // Create a map of week to manual forecast
+            const manualFcMap = {};
+            if(manualWeeks.length > 0 && manualFc.length > 0) {
+                manualWeeks.forEach((wk, idx) => {
+                    if(idx < manualFc.length && manualFc[idx] != null && !isNaN(manualFc[idx])) {
+                        manualFcMap[wk] = manualFc[idx];
+                    }
+                });
+            }
+            
+            // Build aligned data for chart - only weeks where both actual and FC exist
+            const chartWeeks = [];
+            const chartActuals = [];
+            const chartForecasts = [];
+            const chartDeviations = [];
+            
+            weeks.forEach((wk, i) => {
+                const actual = actuals[i];
+                const fc = manualFcMap[wk];
+                if(actual != null && fc != null && fc !== 0) {
+                    chartWeeks.push(wk);
+                    chartActuals.push(actual);
+                    chartForecasts.push(fc);
+                    const dev = ((actual - fc) / fc) * 100;
+                    chartDeviations.push(dev);
+                }
+            });
+            
+            // Create line chart with deviation bars
+            const traces = [
+                {
+                    x: chartWeeks,
+                    y: chartActuals,
+                    name: 'Actual',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: MP_COLORS[mp], width: 2 },
+                    marker: { size: 8 },
+                    yaxis: 'y'
+                },
+                {
+                    x: chartWeeks,
+                    y: chartForecasts,
+                    name: 'Manual FC',
+                    type: 'scatter',
+                    mode: 'lines+markers',
+                    line: { color: '#9c27b0', width: 2, dash: 'dot' },
+                    marker: { size: 6 },
+                    yaxis: 'y'
+                },
+                {
+                    x: chartWeeks,
+                    y: chartDeviations,
+                    name: 'Deviation %',
+                    type: 'bar',
+                    marker: { 
+                        color: chartDeviations.map(d => d >= 0 ? 'rgba(76,175,80,0.6)' : 'rgba(244,67,54,0.6)'),
+                        line: { color: chartDeviations.map(d => d >= 0 ? '#4caf50' : '#f44336'), width: 1 }
+                    },
+                    yaxis: 'y2'
+                }
+            ];
+            
+            // Calculate Y-axis range
+            const allVals = [...chartActuals, ...chartForecasts];
+            const yMax = allVals.length > 0 ? Math.max(...allVals) * 1.1 : 100;
+            const devMax = chartDeviations.length > 0 ? Math.max(Math.abs(Math.min(...chartDeviations)), Math.abs(Math.max(...chartDeviations)), 30) * 1.2 : 50;
+            
+            Plotly.newPlot('deviationChart', traces, {
+                margin: { t: 20, r: 60, b: 80, l: 60 },
+                paper_bgcolor: 'transparent', 
+                plot_bgcolor: 'transparent',
+                font: { color: '#8892b0', family: 'Inter' },
+                xaxis: { 
+                    gridcolor: 'rgba(255,255,255,0.1)', 
+                    tickangle: -45,
+                    type: 'category'
+                },
+                yaxis: { 
+                    gridcolor: 'rgba(255,255,255,0.1)',
+                    title: { text: metric, font: { size: 10 } },
+                    range: [0, yMax]
+                },
+                yaxis2: {
+                    overlaying: 'y',
+                    side: 'right',
+                    title: { text: 'Deviation %', font: { size: 10 } },
+                    range: [-devMax, devMax],
+                    zeroline: true,
+                    zerolinecolor: 'rgba(255,255,255,0.3)',
+                    gridcolor: 'rgba(255,255,255,0.05)'
+                },
+                legend: { orientation: 'h', y: -0.3, font: { size: 10 } },
+                barmode: 'overlay'
+            }, { responsive: true, displayModeBar: false });
+            
+            // Build deviation table - show most recent weeks first (only compared weeks)
+            const tbody = document.getElementById('historicDeviationsTableBody');
+            tbody.innerHTML = '';
+            const reversedIndices = [...Array(chartWeeks.length).keys()].reverse();
+            reversedIndices.forEach(idx => {
+                const wk = chartWeeks[idx];
+                const actual = chartActuals[idx];
+                const fc = chartForecasts[idx];
+                const dev = chartDeviations[idx];
+                const devCls = getDevClass(dev);
+                tbody.innerHTML += '<tr><td class="week-cell">' + wk + '</td><td class="value-cell">' + formatValue(actual, metric) + '</td><td class="forecast-cell">' + formatValue(fc, metric) + '</td><td class="deviation-cell ' + devCls + '">' + (dev > 0 ? '+' : '') + dev.toFixed(1) + '%</td><td>-</td><td>-</td></tr>';
+            });
+            
+            // Add deviation summary
+            const summary = document.getElementById('deviationSummary');
+            if(summary && chartDeviations.length > 0) {
+                const absDeviations = chartDeviations.map(d => Math.abs(d));
+                const avgDev = absDeviations.reduce((a,b) => a+b, 0) / absDeviations.length;
+                const maxDev = Math.max(...absDeviations);
+                const minDev = Math.min(...absDeviations);
+                const devClass = avgDev < 20 ? 'summary-good' : (avgDev < 30 ? 'summary-warn' : 'summary-bad');
+                summary.innerHTML = '<div class="deviation-summary-grid"><div class="summary-card"><div class="summary-value">' + chartWeeks.length + '</div><div class="summary-label">Compared Weeks</div></div><div class="summary-card ' + devClass + '"><div class="summary-value">' + avgDev.toFixed(1) + '%</div><div class="summary-label">Avg |Dev|</div></div><div class="summary-card"><div class="summary-value">' + maxDev.toFixed(1) + '%</div><div class="summary-label">Max |Dev|</div></div><div class="summary-card"><div class="summary-value">' + minDev.toFixed(1) + '%</div><div class="summary-label">Min |Dev|</div></div></div>';
+            } else {
+                summary.innerHTML = '<p style="color:var(--text-muted);padding:1rem;">No overlapping data available for comparison</p>';
+            }
+        }
+        
+        function updateDashboard() {
+            updateStats();
+            updateAccuracy();
+            updateCharts();
+            updateLatestWeek();
+            updateDeviations();
+        }
+        
+        document.addEventListener('DOMContentLoaded', function() {
+            updateDashboard();
+            // Fix Plotly timing issue - resize charts after DOM is fully rendered
+            resizeAllCharts();
+        });
+    </script>
+</body>
+</html>

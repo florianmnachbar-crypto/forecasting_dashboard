@@ -17,7 +17,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "2.3.2"
+APP_VERSION = "2.4.0"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -715,7 +715,7 @@ def generate_all_forecasts():
                             forecast['promo_info'] = promo_info
                         forecasts[metric][mp] = forecast
         
-        # Calculate Net Ordered Units from the multiplication of driver metrics
+        # Calculate Net Ordered Units - either derived from drivers or direct forecast
         forecasts['Net Ordered Units'] = {}
         
         for mp in DataProcessor.MARKETPLACES:
@@ -725,11 +725,11 @@ def generate_all_forecasts():
             has_upo = mp in forecasts.get('UPO', {})
             
             if has_transits and has_conversion and has_upo:
+                # Derive NOU from drivers: NOU = Transits × Conversion × UPO
                 transits_fc = forecasts['Transits'][mp]
                 conversion_fc = forecasts['Transit Conversion'][mp]
                 upo_fc = forecasts['UPO'][mp]
                 
-                # Calculate Net Ordered Units = Transits × Conversion × UPO
                 nou_values = []
                 nou_lower = []
                 nou_upper = []
@@ -743,20 +743,18 @@ def generate_all_forecasts():
                     nou_values.append(max(0, nou))
                     
                     # Confidence intervals using error propagation
-                    # Lower bound: use lower bounds of all drivers
                     t_low = transits_fc['lower_bound'][i]
                     c_low = conversion_fc['lower_bound'][i]
                     u_low = upo_fc['lower_bound'][i]
                     nou_lower.append(max(0, t_low * c_low * u_low))
                     
-                    # Upper bound: use upper bounds of all drivers
                     t_up = transits_fc['upper_bound'][i]
                     c_up = conversion_fc['upper_bound'][i]
                     u_up = upo_fc['upper_bound'][i]
                     nou_upper.append(max(0, t_up * c_up * u_up))
                 
                 forecasts['Net Ordered Units'][mp] = {
-                    'dates': transits_fc['dates'],  # Use same dates
+                    'dates': transits_fc['dates'],
                     'values': nou_values,
                     'lower_bound': nou_lower,
                     'upper_bound': nou_upper,
@@ -771,6 +769,59 @@ def generate_all_forecasts():
                         }
                     }
                 }
+            else:
+                # FALLBACK: Forecast NOU directly when driver metrics unavailable
+                df = data_processor.get_dataframe('Net Ordered Units', mp)
+                
+                if df is not None and not df.empty and len(df) >= 4:
+                    # Prepare promo exog if requested
+                    exog = None
+                    future_exog = None
+                    promo_info = None
+                    future_scores = None
+                    
+                    if include_promo and data_processor.has_promo_scores and model_type.lower() == 'sarimax':
+                        exog, future_exog, promo_info = _prepare_promo_exog(
+                            data_processor, 'Net Ordered Units', mp, df, forecaster.forecast_horizon
+                        )
+                        if promo_info:
+                            future_scores = [item['score'] for item in promo_info.get('future_scores', [])]
+                    
+                    if model_type.lower() == 'sarimax':
+                        # Generate baseline forecast for floor comparison
+                        baseline_forecast = None
+                        if include_promo and exog is not None:
+                            baseline_forecast = forecaster.forecast_sarimax(
+                                df, use_seasonality=use_seasonality, exog=None, future_exog=None
+                            )
+                        
+                        forecast = forecaster.forecast_sarimax(
+                            df, use_seasonality=use_seasonality, exog=exog, future_exog=future_exog
+                        )
+                        
+                        if forecast and baseline_forecast and future_scores:
+                            forecast = _apply_promo_floor(forecast, baseline_forecast, future_scores)
+                    else:
+                        forecast = forecaster.generate_forecast(
+                            df, model_type=model_type, use_seasonality=use_seasonality
+                        )
+                    
+                    if forecast:
+                        # Update model info to indicate direct forecasting
+                        forecast['model_info'] = {
+                            'method': 'direct',
+                            'reason': 'Driver metrics unavailable',
+                            'missing_drivers': [
+                                m for m in ['Transits', 'Transit Conversion', 'UPO']
+                                if mp not in forecasts.get(m, {})
+                            ]
+                        }
+                        forecast['model'] = forecast.get('model', 'SARIMAX') + ' (Direct)'
+                        
+                        if promo_info:
+                            forecast['promo_info'] = promo_info
+                        
+                        forecasts['Net Ordered Units'][mp] = forecast
         
         return jsonify({
             'success': True,
