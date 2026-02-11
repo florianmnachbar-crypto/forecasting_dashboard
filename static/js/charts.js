@@ -1220,26 +1220,29 @@ function populatePromoAnalysisGrid() {
 function populateRegressorAnalysisGrid(grid) {
     const metrics = ['Net Ordered Units', 'Transits', 'Transit Conversion', 'UPO'];
     const mpOrder = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
-    const mpNames = {
-        'UK': 'United Kingdom', 'DE': 'Germany', 'FR': 'France',
-        'IT': 'Italy', 'ES': 'Spain', 'EU5': 'EU5 (All)'
-    };
     
     const impactLabels = ['No Promo', 'MEDIUM', 'HIGH', 'MEGA'];
     const impactColors = {
         'No Promo': '#6c757d', 'MEDIUM': '#ffc107', 'HIGH': '#ff9800', 'MEGA': '#f44336'
     };
     
+    // Categorical vs continuous regressors
+    const categoricalRegressors = ['promo_type', 'volume_impact'];
+    const continuousRegressors = ['discount_pct', 'promo_count'];
     const regressorLabels = {
         'promo_type': 'Promo Type',
         'discount_pct': 'Discount %',
         'volume_impact': 'Volume Impact',
         'promo_count': 'Promo Count'
     };
+    const continuousUnits = {
+        'discount_pct': '/pp',
+        'promo_count': '/promo'
+    };
     
     let html = '';
     
-    // === SECTION 1: Uplift by Volume Impact Matrix ===
+    // === SECTION 1: Uplift by Volume Impact Matrix (NO Baseline column, multiplier + weeks only) ===
     html += '<h3 class="promo-section-title"><i class="fas fa-chart-bar"></i> Uplift by Volume Impact Level</h3>';
     html += '<div class="promo-matrix-container">';
     
@@ -1255,7 +1258,7 @@ function populateRegressorAnalysisGrid(grid) {
             const color = impactColors[impact];
             html += `<th><span style="color: ${color};">${impact}</span></th>`;
         }
-        html += `<th>Baseline</th></tr></thead><tbody>`;
+        html += `</tr></thead><tbody>`;
         
         for (const mp of mpOrder) {
             if (!analysis[mp]) continue;
@@ -1267,24 +1270,28 @@ function populateRegressorAnalysisGrid(grid) {
             for (const impact of impactLabels) {
                 const data = upliftByImpact[impact];
                 if (data && data.count > 0) {
-                    const upliftPct = data.uplift_pct || 0;
-                    const upliftClass = impact === 'No Promo' ? '' : 
-                        (upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral'));
-                    const sign = upliftPct > 0 ? '+' : '';
-                    
-                    html += `<td class="${upliftClass}" title="${data.count} weeks, avg: ${formatNumber(data.average)}">`;
                     if (impact === 'No Promo') {
+                        // Baseline column: show avg + week count
+                        html += `<td title="Baseline: avg ${formatNumber(data.average)}, ${data.count} weeks">`;
                         html += `${formatNumber(data.average)} <span class="week-count">(${data.count}w)</span>`;
+                        html += `</td>`;
                     } else {
-                        html += `${data.uplift_factor ? data.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${sign}${upliftPct.toFixed(0)}%)</span>`;
+                        // Promo columns: multiplier + week count only, % in tooltip
+                        const upliftPct = data.uplift_pct || 0;
+                        const sign = upliftPct > 0 ? '+' : '';
+                        const upliftClass = upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral');
+                        const lowConfidence = data.count <= 2;
+                        const lcIndicator = lowConfidence ? ' <span class="low-confidence" title="Low confidence: ≤2 weeks of data">⚠</span>' : '';
+                        
+                        html += `<td class="${upliftClass}" title="${sign}${upliftPct.toFixed(0)}% uplift, ${data.count} weeks, avg: ${formatNumber(data.average)}">`;
+                        html += `${data.uplift_factor ? data.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${data.count}w)</span>${lcIndicator}`;
+                        html += `</td>`;
                     }
-                    html += `</td>`;
                 } else {
                     html += `<td class="no-data">--</td>`;
                 }
             }
             
-            html += `<td>${mpData.baseline_avg ? formatNumber(mpData.baseline_avg) : '--'}</td>`;
             html += `</tr>`;
         }
         
@@ -1302,7 +1309,7 @@ function populateRegressorAnalysisGrid(grid) {
     if (promoTypeFilter) promoTypeFilter.style.display = 'inline-block';
     
     html += '<h3 class="promo-section-title" style="margin-top: 2rem;"><i class="fas fa-th"></i> Promo Type × Volume Impact Breakdown</h3>';
-    html += '<p class="promo-section-desc">Average metric values by promo type and expected volume impact. Uplift shown relative to baseline (no promo weeks).</p>';
+    html += '<p class="promo-section-desc">Uplift shown as multiplier vs baseline (no promo weeks). Hover for percentage. <span class="low-confidence">⚠</span> = ≤2 weeks (low confidence).</p>';
     
     const promoTypes = ['HVE', 'Dollar Deals', 'Discount %'];
     const viLevels = ['MEDIUM', 'HIGH', 'MEGA'];
@@ -1317,6 +1324,12 @@ function populateRegressorAnalysisGrid(grid) {
         const typesToShow = selectedType === 'all' ? promoTypes : [selectedType];
         
         for (const pType of typesToShow) {
+            // For Discount %, show discount sub-filter and discount crosstab
+            if (pType === 'Discount %') {
+                html += buildDiscountCrosstab(selectedMetric, ctAnalysis, mpOrder, viLevels, viColors);
+                continue;
+            }
+            
             html += `<div class="promo-matrix-card">`;
             html += `<h4 class="promo-matrix-title">${pType} — ${selectedMetric}</h4>`;
             html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
@@ -1336,11 +1349,13 @@ function populateRegressorAnalysisGrid(grid) {
                     const cell = ptData[vi];
                     if (cell && cell.count > 0) {
                         const upliftPct = cell.uplift_pct || 0;
-                        const upliftClass = upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral');
                         const sign = upliftPct > 0 ? '+' : '';
+                        const upliftClass = upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral');
+                        const lowConfidence = cell.count <= 2;
+                        const lcIndicator = lowConfidence ? ' <span class="low-confidence" title="Low confidence: ≤2 weeks of data">⚠</span>' : '';
                         
-                        html += `<td class="${upliftClass}" title="${cell.count} weeks, avg: ${formatNumber(cell.average)}">`;
-                        html += `${cell.uplift_factor ? cell.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${sign}${upliftPct.toFixed(0)}%, ${cell.count}w)</span>`;
+                        html += `<td class="${upliftClass}" title="${sign}${upliftPct.toFixed(0)}% uplift, ${cell.count} weeks, avg: ${formatNumber(cell.average)}">`;
+                        html += `${cell.uplift_factor ? cell.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${cell.count}w)</span>${lcIndicator}`;
                         html += `</td>`;
                     } else {
                         html += `<td class="no-data">--</td>`;
@@ -1355,9 +1370,9 @@ function populateRegressorAnalysisGrid(grid) {
         html += '</div>';
     }
     
-    // === SECTION 3: Regression Fit (R²) ===
+    // === SECTION 3: Regression Fit (R²) — R²-only for categorical, coefficient for continuous ===
     html += '<h3 class="promo-section-title" style="margin-top: 2rem;"><i class="fas fa-chart-line"></i> Regression Fit (R²)</h3>';
-    html += '<p class="promo-section-desc">How strongly each regressor correlates with metric changes. R² > 0.3 = strong, > 0.1 = moderate. % impact = effect per 1-unit increase relative to baseline.</p>';
+    html += '<p class="promo-section-desc">How strongly each regressor correlates with metric changes. R² > 0.3 = strong, > 0.1 = moderate. Coefficient shown only for continuous variables.</p>';
     html += '<div class="promo-matrix-container">';
     
     for (const metric of metrics) {
@@ -1384,11 +1399,20 @@ function populateRegressorAnalysisGrid(grid) {
                 if (c && c.r_squared > 0) {
                     const rSq = c.r_squared;
                     const strengthClass = rSq > 0.3 ? 'coeff-strong' : (rSq > 0.1 ? 'coeff-moderate' : 'coeff-weak');
-                    const pctImpact = c.pct_impact || 0;
-                    const sign = pctImpact > 0 ? '+' : '';
+                    const isContinuous = continuousRegressors.includes(regKey);
                     
                     html += `<td class="${strengthClass}" title="Coefficient: ${c.coefficient}, R²: ${rSq}">`;
-                    html += `R²=${rSq.toFixed(2)} <span class="week-count">${sign}${pctImpact.toFixed(1)}%/unit</span>`;
+                    html += `R²=${rSq.toFixed(2)}`;
+                    
+                    if (isContinuous) {
+                        // Show coefficient for continuous vars
+                        const pctImpact = c.pct_impact || 0;
+                        const sign = pctImpact > 0 ? '+' : '';
+                        const unit = continuousUnits[regKey] || '/unit';
+                        html += ` <span class="week-count">${sign}${pctImpact.toFixed(1)}%${unit}</span>`;
+                    }
+                    // Categorical: just R² with color, no coefficient
+                    
                     html += `</td>`;
                 } else {
                     html += `<td class="no-data">--</td>`;
@@ -1404,6 +1428,106 @@ function populateRegressorAnalysisGrid(grid) {
     html += '</div>';
     
     grid.innerHTML = html || '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available.</p>';
+}
+
+// Build Discount % crosstab with sub-filter by actual discount values
+function buildDiscountCrosstab(selectedMetric, ctAnalysis, mpOrder, viLevels, viColors) {
+    let html = '';
+    
+    // Get available discount values from promo data
+    const discountValues = state.promoScores?.discount_values || [];
+    
+    // Get selected discount filter
+    const discFilterEl = document.getElementById('discountSubFilter');
+    const selectedDiscount = discFilterEl?.value || 'all';
+    
+    html += `<div class="promo-matrix-card" style="min-width: 100%;">`;
+    html += `<h4 class="promo-matrix-title">Discount % — ${selectedMetric}`;
+    
+    // Add sub-filter dropdown
+    if (discountValues.length > 0) {
+        html += ` <select id="discountSubFilter" class="discount-sub-filter" onchange="populatePromoAnalysisGrid()">`;
+        html += `<option value="all"${selectedDiscount === 'all' ? ' selected' : ''}>All Discounts</option>`;
+        for (const dv of discountValues) {
+            const label = `${Math.round(dv)}%`;
+            html += `<option value="${dv}"${selectedDiscount == dv ? ' selected' : ''}>${label}</option>`;
+        }
+        html += `</select>`;
+    }
+    html += `</h4>`;
+    
+    // Build the table — either from discount_crosstab (per-discount) or standard crosstab
+    html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
+    
+    if (selectedDiscount === 'all') {
+        // Show standard Discount % crosstab from promo_type crosstab
+        for (const vi of viLevels) {
+            html += `<th><span style="color: ${viColors[vi]};">${vi}</span></th>`;
+        }
+        html += `</tr></thead><tbody>`;
+        
+        for (const mp of mpOrder) {
+            if (!ctAnalysis[mp]) continue;
+            const crosstab = ctAnalysis[mp].crosstab || {};
+            const ptData = crosstab['Discount %'] || {};
+            
+            html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+            
+            for (const vi of viLevels) {
+                const cell = ptData[vi];
+                if (cell && cell.count > 0) {
+                    const upliftPct = cell.uplift_pct || 0;
+                    const sign = upliftPct > 0 ? '+' : '';
+                    const upliftClass = upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral');
+                    const lowConfidence = cell.count <= 2;
+                    const lcIndicator = lowConfidence ? ' <span class="low-confidence" title="Low confidence: ≤2 weeks of data">⚠</span>' : '';
+                    
+                    html += `<td class="${upliftClass}" title="${sign}${upliftPct.toFixed(0)}% uplift, ${cell.count} weeks, avg: ${formatNumber(cell.average)}">`;
+                    html += `${cell.uplift_factor ? cell.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${cell.count}w)</span>${lcIndicator}`;
+                    html += `</td>`;
+                } else {
+                    html += `<td class="no-data">--</td>`;
+                }
+            }
+            html += `</tr>`;
+        }
+    } else {
+        // Show filtered discount crosstab from discount_crosstab data
+        const discLabel = `${Math.round(parseFloat(selectedDiscount))}%`;
+        for (const vi of viLevels) {
+            html += `<th><span style="color: ${viColors[vi]};">${vi}</span></th>`;
+        }
+        html += `</tr></thead><tbody>`;
+        
+        for (const mp of mpOrder) {
+            if (!ctAnalysis[mp]) continue;
+            const discCrosstab = ctAnalysis[mp].discount_crosstab || {};
+            const discData = discCrosstab[discLabel] || {};
+            
+            html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+            
+            for (const vi of viLevels) {
+                const cell = discData[vi];
+                if (cell && cell.count > 0) {
+                    const upliftPct = cell.uplift_pct || 0;
+                    const sign = upliftPct > 0 ? '+' : '';
+                    const upliftClass = upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral');
+                    const lowConfidence = cell.count <= 2;
+                    const lcIndicator = lowConfidence ? ' <span class="low-confidence" title="Low confidence: ≤2 weeks of data">⚠</span>' : '';
+                    
+                    html += `<td class="${upliftClass}" title="${sign}${upliftPct.toFixed(0)}% uplift, ${cell.count} weeks, avg: ${formatNumber(cell.average)}">`;
+                    html += `${cell.uplift_factor ? cell.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${cell.count}w)</span>${lcIndicator}`;
+                    html += `</td>`;
+                } else {
+                    html += `<td class="no-data">--</td>`;
+                }
+            }
+            html += `</tr>`;
+        }
+    }
+    
+    html += `</tbody></table></div>`;
+    return html;
 }
 
 function populateLegacyPromoGrid(grid) {

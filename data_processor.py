@@ -1073,6 +1073,90 @@ class DataProcessor:
         
         return result
     
+    def get_distinct_discount_values(self):
+        """Get sorted list of distinct non-zero discount_pct values from the data."""
+        discounts = set()
+        for mp_data in self.promo_regressors.values():
+            for week_data in mp_data.values():
+                d = week_data.get('discount_pct', 0)
+                if d > 0:
+                    discounts.add(d)
+        return sorted(discounts)
+    
+    def calculate_discount_crosstab(self, metric='Net Ordered Units', discount_filter=None):
+        """Cross-tabulate metric averages by discount_pct value × volume_impact.
+        
+        Args:
+            metric: Metric to analyze
+            discount_filter: Specific discount value to filter on (None = all)
+        
+        Returns per-MP: matrix of avg values for each (discount_pct, volume_impact) combo
+        """
+        if not self.promo_regressors or not self.data:
+            return None
+        
+        result = {}
+        
+        for mp in self.MARKETPLACES:
+            df = self.get_dataframe(metric, mp, is_forecast=False)
+            if df is None or df.empty:
+                continue
+            
+            data_points = []
+            for _, row in df.iterrows():
+                week_label = self.format_week_label(row['ds'])
+                regs = self.get_promo_regressors_for_week(mp, week_label)
+                if regs is not None:
+                    data_points.append({'value': row['y'], **regs})
+                else:
+                    data_points.append({
+                        'value': row['y'], 'promo_type': 0,
+                        'discount_pct': 0, 'volume_impact': 0, 'promo_count': 0,
+                    })
+            
+            if not data_points:
+                continue
+            
+            # Baseline
+            baseline_pts = [dp['value'] for dp in data_points if dp['promo_type'] == 0]
+            baseline_avg = np.mean(baseline_pts) if baseline_pts else None
+            
+            # Filter to only Discount % promo type (type=1) with non-zero discount
+            discount_pts = [dp for dp in data_points if dp['promo_type'] == 1 and dp['discount_pct'] > 0]
+            
+            if discount_filter is not None:
+                discount_pts = [dp for dp in discount_pts if dp['discount_pct'] == discount_filter]
+            
+            # Group by discount_pct × volume_impact
+            disc_crosstab = {}
+            # Get distinct discount values in this MP
+            disc_values = sorted(set(dp['discount_pct'] for dp in discount_pts))
+            
+            for dv in disc_values:
+                dv_label = f"{int(dv)}%"
+                disc_crosstab[dv_label] = {}
+                for _, vi_val, vi_label in self.VOLUME_IMPACT_BANDS:
+                    if vi_val == 0:
+                        continue
+                    pts = [dp['value'] for dp in discount_pts
+                           if dp['discount_pct'] == dv and dp['volume_impact'] == vi_val]
+                    if pts:
+                        avg = np.mean(pts)
+                        entry = {'count': len(pts), 'average': round(avg, 2)}
+                        if baseline_avg and baseline_avg > 0:
+                            uplift = avg / baseline_avg
+                            entry['uplift_factor'] = round(uplift, 2)
+                            entry['uplift_pct'] = round((uplift - 1) * 100, 1)
+                        disc_crosstab[dv_label][vi_label] = entry
+            
+            result[mp] = {
+                'discount_crosstab': disc_crosstab,
+                'discount_values': disc_values,
+                'baseline_avg': round(baseline_avg, 2) if baseline_avg else None,
+            }
+        
+        return result
+    
     def get_all_regressor_analysis(self):
         """Get regressor-based promo analysis for all metrics."""
         if not self.promo_regressors:
@@ -1088,6 +1172,12 @@ class DataProcessor:
                     for mp in analysis:
                         if mp in crosstab:
                             analysis[mp]['crosstab'] = crosstab[mp]['crosstab']
+                # Add discount crosstab
+                disc_ct = self.calculate_discount_crosstab(metric)
+                if disc_ct:
+                    for mp in analysis:
+                        if mp in disc_ct:
+                            analysis[mp]['discount_crosstab'] = disc_ct[mp]['discount_crosstab']
                 result[metric] = analysis
         return result
 

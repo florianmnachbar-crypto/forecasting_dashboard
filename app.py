@@ -182,6 +182,7 @@ def get_promo_scores():
             promo_data['volume_impact_labels'] = {
                 0: 'No Promo', 1: 'MEDIUM', 2: 'HIGH', 3: 'MEGA'
             }
+            promo_data['discount_values'] = data_processor.get_distinct_discount_values()
         
         return jsonify({
             'success': True,

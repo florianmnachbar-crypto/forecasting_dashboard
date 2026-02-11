@@ -1741,6 +1741,28 @@ input:checked + .toggle-slider::before {
     display: block;
 }
 
+.low-confidence {
+    color: #ff9800;
+    font-size: 0.85rem;
+    cursor: help;
+}
+
+.discount-sub-filter {
+    margin-left: 0.75rem;
+    padding: 0.25rem 0.5rem;
+    border-radius: 6px;
+    border: 1px solid var(--border-color);
+    background: var(--bg-card);
+    color: var(--text-primary);
+    font-size: 0.8rem;
+    cursor: pointer;
+}
+
+.discount-sub-filter:focus {
+    outline: none;
+    border-color: var(--accent);
+}
+
 .promo-matrix-table td .r-squared {
     font-size: 0.7rem;
     color: var(--text-muted);
