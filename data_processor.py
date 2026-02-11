@@ -1004,6 +1004,75 @@ class DataProcessor:
         
         return result
     
+    def calculate_promo_type_crosstab(self, metric='Net Ordered Units'):
+        """Cross-tabulate metric averages by promo_type × volume_impact.
+        
+        Returns per-MP: a matrix of avg metric values for each
+        (promo_type, volume_impact) combination, plus uplift vs baseline.
+        """
+        if not self.promo_regressors or not self.data:
+            return None
+        
+        result = {}
+        
+        for mp in self.MARKETPLACES:
+            df = self.get_dataframe(metric, mp, is_forecast=False)
+            if df is None or df.empty:
+                continue
+            
+            data_points = []
+            for _, row in df.iterrows():
+                week_label = self.format_week_label(row['ds'])
+                regs = self.get_promo_regressors_for_week(mp, week_label)
+                
+                if regs is not None:
+                    data_points.append({'value': row['y'], **regs})
+                else:
+                    data_points.append({
+                        'value': row['y'],
+                        'promo_type': 0, 'discount_pct': 0,
+                        'volume_impact': 0, 'promo_count': 0,
+                    })
+            
+            if not data_points:
+                continue
+            
+            # Baseline (no promo)
+            baseline_pts = [dp['value'] for dp in data_points if dp['promo_type'] == 0]
+            baseline_avg = np.mean(baseline_pts) if baseline_pts else None
+            
+            # Cross-tab: promo_type × volume_impact
+            crosstab = {}
+            for pt_val, pt_label in self.PROMO_TYPE_LABELS.items():
+                if pt_val == 0:
+                    continue  # Skip "None" in cross-tab
+                crosstab[pt_label] = {}
+                for _, vi_val, vi_label in self.VOLUME_IMPACT_BANDS:
+                    if vi_val == 0:
+                        continue  # Skip "No Promo" in cross-tab
+                    pts = [dp['value'] for dp in data_points
+                           if dp['promo_type'] == pt_val and dp['volume_impact'] == vi_val]
+                    if pts:
+                        avg = np.mean(pts)
+                        entry = {
+                            'count': len(pts),
+                            'average': round(avg, 2),
+                        }
+                        if baseline_avg and baseline_avg > 0:
+                            uplift = avg / baseline_avg
+                            entry['uplift_factor'] = round(uplift, 2)
+                            entry['uplift_pct'] = round((uplift - 1) * 100, 1)
+                        crosstab[pt_label][vi_label] = entry
+            
+            result[mp] = {
+                'crosstab': crosstab,
+                'baseline_avg': round(baseline_avg, 2) if baseline_avg else None,
+                'baseline_weeks': len(baseline_pts),
+                'total_weeks': len(data_points),
+            }
+        
+        return result
+    
     def get_all_regressor_analysis(self):
         """Get regressor-based promo analysis for all metrics."""
         if not self.promo_regressors:
@@ -1013,6 +1082,12 @@ class DataProcessor:
         for metric in self.METRICS:
             analysis = self.calculate_regressor_uplift_analysis(metric)
             if analysis:
+                # Add cross-tab data
+                crosstab = self.calculate_promo_type_crosstab(metric)
+                if crosstab:
+                    for mp in analysis:
+                        if mp in crosstab:
+                            analysis[mp]['crosstab'] = crosstab[mp]['crosstab']
                 result[metric] = analysis
         return result
 

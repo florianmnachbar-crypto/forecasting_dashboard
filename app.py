@@ -155,7 +155,11 @@ def get_accuracy():
 
 @app.route('/api/promo-scores', methods=['GET'])
 def get_promo_scores():
-    """Get promo scores data for visualization overlays"""
+    """Get promo scores data for visualization overlays.
+    
+    For regressor format: also includes volume_impact per week per MP
+    for chart overlay coloring (historic + future).
+    """
     global data_processor
     
     if data_processor is None:
@@ -170,6 +174,15 @@ def get_promo_scores():
             })
         
         promo_data = data_processor.get_promo_scores_data()
+        
+        # If regressor format, also include the full regressor data
+        if data_processor.promo_format == 'regressors' and data_processor.promo_regressors:
+            promo_data['regressors'] = data_processor.promo_regressors
+            promo_data['format'] = 'regressors'
+            promo_data['volume_impact_labels'] = {
+                0: 'No Promo', 1: 'MEDIUM', 2: 'HIGH', 3: 'MEGA'
+            }
+        
         return jsonify({
             'success': True,
             'has_promo_scores': True,

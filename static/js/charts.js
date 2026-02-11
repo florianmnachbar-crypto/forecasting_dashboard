@@ -26,12 +26,12 @@ const state = {
     hasPromoScores: false
 };
 
-// Promo band colors (for chart overlays)
-const promoBandColors = {
-    'No/Low Promo': { bg: 'rgba(128, 128, 128, 0.1)', border: 'rgba(128, 128, 128, 0.3)' },
-    'Light Promo': { bg: 'rgba(100, 181, 246, 0.15)', border: 'rgba(100, 181, 246, 0.4)' },
-    'Medium Promo': { bg: 'rgba(255, 193, 7, 0.15)', border: 'rgba(255, 193, 7, 0.4)' },
-    'Strong Promo': { bg: 'rgba(255, 87, 34, 0.2)', border: 'rgba(255, 87, 34, 0.5)' }
+// Volume impact overlay colors (for chart overlays)
+const volumeImpactColors = {
+    0: { bg: 'rgba(0, 0, 0, 0)', border: 'transparent', label: 'No Promo' },       // transparent
+    1: { bg: 'rgba(255, 193, 7, 0.15)', border: 'rgba(255, 193, 7, 0.4)', label: 'MEDIUM' },
+    2: { bg: 'rgba(255, 152, 0, 0.18)', border: 'rgba(255, 152, 0, 0.5)', label: 'HIGH' },
+    3: { bg: 'rgba(244, 67, 54, 0.20)', border: 'rgba(244, 67, 54, 0.5)', label: 'MEGA' }
 };
 
 // Marketplace colors
@@ -103,8 +103,9 @@ function initializeEventListeners() {
     document.getElementById('deviationMetricSelect')?.addEventListener('change', loadHistoricDeviations);
     document.getElementById('deviationMpSelect')?.addEventListener('change', loadHistoricDeviations);
     
-    // Promo analysis select
+    // Promo analysis selects
     document.getElementById('promoMetricSelect')?.addEventListener('change', populatePromoAnalysisGrid);
+    document.getElementById('promoTypeFilter')?.addEventListener('change', populatePromoAnalysisGrid);
     
     // Export dropdown
     initializeExportDropdown();
@@ -928,17 +929,35 @@ function renderChart(marketplace, metric, isModal = false) {
     // Use week labels for x-axis
     const weekLabels = historicalData.weeks || historicalData.dates.map(d => formatDateToWeek(d));
     
-    // Build promo score annotations for tooltips
+    // Build volume impact annotations for promo overlay (historic weeks)
     const promoAnnotations = [];
     if (state.hasPromoScores && state.showPromoOverlay) {
+        const regressors = state.promoScores?.regressors;
         weekLabels.forEach((week, idx) => {
-            const score = getPromoScoreForWeek(marketplace, week);
-            if (score !== null) {
-                promoAnnotations.push({
-                    week: week,
-                    score: score,
-                    band: getPromoBand(score)
-                });
+            let vi = null;
+            if (regressors && regressors[marketplace] && regressors[marketplace][week]) {
+                vi = regressors[marketplace][week].volume_impact || 0;
+            } else {
+                // Fall back to legacy score
+                const score = getPromoScoreForWeek(marketplace, week);
+                if (score !== null) vi = Math.round(score);  // 0-3
+            }
+            promoAnnotations.push({ week, idx, volumeImpact: vi });
+        });
+    }
+    
+    // Also build future week overlay from regressor data (forecast period)
+    const futurePromoAnnotations = [];
+    if (state.hasPromoScores && state.showPromoOverlay && forecast) {
+        const regressors = state.promoScores?.regressors;
+        const forecastWeeks = forecast.dates.map(d => formatDateToWeek(d));
+        forecastWeeks.forEach((week, idx) => {
+            let vi = null;
+            if (regressors && regressors[marketplace] && regressors[marketplace][week]) {
+                vi = regressors[marketplace][week].volume_impact || 0;
+            }
+            if (vi !== null && vi > 0) {
+                futurePromoAnnotations.push({ week, idx: weekLabels.length + idx, volumeImpact: vi });
             }
         });
     }
@@ -1099,22 +1118,41 @@ function renderChart(marketplace, metric, isModal = false) {
     else if (maxVal >= 1000000) leftMargin = 75;
     else if (maxVal >= 100000) leftMargin = 70;
     
-    // Build promo overlay shapes
+    // Build promo overlay shapes from volume_impact (historic + future)
     const promoShapes = [];
-    if (state.hasPromoScores && state.showPromoOverlay && promoAnnotations.length > 0) {
-        promoAnnotations.forEach((anno, idx) => {
-            const band = anno.band;
-            if (band && promoBandColors[band]) {
+    if (state.hasPromoScores && state.showPromoOverlay) {
+        // Historic weeks
+        promoAnnotations.forEach((anno) => {
+            const vi = anno.volumeImpact;
+            if (vi !== null && vi > 0 && volumeImpactColors[vi]) {
                 promoShapes.push({
                     type: 'rect',
                     xref: 'x',
                     yref: 'paper',
-                    x0: idx - 0.4,
-                    x1: idx + 0.4,
+                    x0: anno.idx - 0.4,
+                    x1: anno.idx + 0.4,
                     y0: 0,
                     y1: 1,
-                    fillcolor: promoBandColors[band].bg,
+                    fillcolor: volumeImpactColors[vi].bg,
                     line: { width: 0 },
+                    layer: 'below'
+                });
+            }
+        });
+        // Future weeks (from forecast period)
+        futurePromoAnnotations.forEach((anno) => {
+            const vi = anno.volumeImpact;
+            if (vi !== null && vi > 0 && volumeImpactColors[vi]) {
+                promoShapes.push({
+                    type: 'rect',
+                    xref: 'x',
+                    yref: 'paper',
+                    x0: anno.week,
+                    x1: anno.week,
+                    y0: 0,
+                    y1: 1,
+                    fillcolor: volumeImpactColors[vi].bg,
+                    line: { color: volumeImpactColors[vi].border, width: 1.5, dash: 'dot' },
                     layer: 'below'
                 });
             }
@@ -1255,53 +1293,67 @@ function populateRegressorAnalysisGrid(grid) {
     
     html += '</div>';
     
-    // === SECTION 2: Regression Coefficients Matrix ===
-    html += '<h3 class="promo-section-title" style="margin-top: 2rem;"><i class="fas fa-chart-line"></i> Regression Coefficients</h3>';
-    html += '<p class="promo-section-desc">How each regressor correlates with metric changes. Higher R² = stronger relationship.</p>';
-    html += '<div class="promo-matrix-container">';
+    // === SECTION 2: Promo Type × Volume Impact Cross-tab ===
+    const selectedMetric = document.getElementById('promoMetricSelect')?.value || 'Net Ordered Units';
+    const selectedType = document.getElementById('promoTypeFilter')?.value || 'all';
+    const promoTypeFilter = document.getElementById('promoTypeFilter');
     
-    for (const metric of metrics) {
-        const analysis = state.promoAnalysis[metric];
-        if (!analysis) continue;
+    // Show the promo type dropdown for regressor format
+    if (promoTypeFilter) promoTypeFilter.style.display = 'inline-block';
+    
+    html += '<h3 class="promo-section-title" style="margin-top: 2rem;"><i class="fas fa-th"></i> Promo Type × Volume Impact Breakdown</h3>';
+    html += '<p class="promo-section-desc">Average metric values by promo type and expected volume impact. Uplift shown relative to baseline (no promo weeks).</p>';
+    
+    const promoTypes = ['HVE', 'Dollar Deals', 'Discount %'];
+    const viLevels = ['MEDIUM', 'HIGH', 'MEGA'];
+    const viColors = { 'MEDIUM': '#ffc107', 'HIGH': '#ff9800', 'MEGA': '#f44336' };
+    
+    // Filter to selected metric only for cross-tab
+    const ctAnalysis = state.promoAnalysis[selectedMetric];
+    if (ctAnalysis) {
+        html += '<div class="promo-matrix-container">';
         
-        html += `<div class="promo-matrix-card">`;
-        html += `<h4 class="promo-matrix-title">${metric}</h4>`;
-        html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
+        // If "all" types selected, show each promo type as a separate table
+        const typesToShow = selectedType === 'all' ? promoTypes : [selectedType];
         
-        for (const [regKey, regLabel] of Object.entries(regressorLabels)) {
-            html += `<th>${regLabel}</th>`;
-        }
-        html += `</tr></thead><tbody>`;
-        
-        for (const mp of mpOrder) {
-            if (!analysis[mp]) continue;
-            const coeffs = analysis[mp].regression_coefficients || {};
+        for (const pType of typesToShow) {
+            html += `<div class="promo-matrix-card">`;
+            html += `<h4 class="promo-matrix-title">${pType} — ${selectedMetric}</h4>`;
+            html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
+            for (const vi of viLevels) {
+                html += `<th><span style="color: ${viColors[vi]};">${vi}</span></th>`;
+            }
+            html += `</tr></thead><tbody>`;
             
-            html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
-            
-            for (const regKey of Object.keys(regressorLabels)) {
-                const c = coeffs[regKey];
-                if (c && c.r_squared > 0) {
-                    const rSq = c.r_squared;
-                    const strengthClass = rSq > 0.3 ? 'coeff-strong' : (rSq > 0.1 ? 'coeff-moderate' : 'coeff-weak');
-                    const pctImpact = c.pct_impact || 0;
-                    const sign = pctImpact > 0 ? '+' : '';
-                    
-                    html += `<td class="${strengthClass}" title="Coefficient: ${c.coefficient}, R²: ${rSq}">`;
-                    html += `${sign}${pctImpact.toFixed(1)}% <span class="r-squared">R²=${rSq.toFixed(2)}</span>`;
-                    html += `</td>`;
-                } else {
-                    html += `<td class="no-data">--</td>`;
+            for (const mp of mpOrder) {
+                if (!ctAnalysis[mp]) continue;
+                const crosstab = ctAnalysis[mp].crosstab || {};
+                const ptData = crosstab[pType] || {};
+                
+                html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+                
+                for (const vi of viLevels) {
+                    const cell = ptData[vi];
+                    if (cell && cell.count > 0) {
+                        const upliftPct = cell.uplift_pct || 0;
+                        const upliftClass = upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral');
+                        const sign = upliftPct > 0 ? '+' : '';
+                        
+                        html += `<td class="${upliftClass}" title="${cell.count} weeks, avg: ${formatNumber(cell.average)}">`;
+                        html += `${cell.uplift_factor ? cell.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${sign}${upliftPct.toFixed(0)}%, ${cell.count}w)</span>`;
+                        html += `</td>`;
+                    } else {
+                        html += `<td class="no-data">--</td>`;
+                    }
                 }
+                html += `</tr>`;
             }
             
-            html += `</tr>`;
+            html += `</tbody></table></div>`;
         }
         
-        html += `</tbody></table></div>`;
+        html += '</div>';
     }
-    
-    html += '</div>';
     
     grid.innerHTML = html || '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available.</p>';
 }

@@ -20,7 +20,7 @@
                 <div class="logo-icon">📊</div>
                 <div>
                     <h1>Amazon Haul EU5</h1>
-                    <span>Forecasting Dashboard v2.4.0</span>
+                    <span>Forecasting Dashboard v2.5.0</span>
                 </div>
             </div>
             <div class="header-actions">
@@ -349,20 +349,28 @@
                             <i class="fas fa-tags"></i>
                             Promo Uplift Analysis
                         </h2>
-                        <select id="promoMetricSelect" class="deviation-metric-select">
-                            <option value="Net Ordered Units">Net Ordered Units</option>
-                            <option value="Transits">Transits</option>
-                            <option value="Transit Conversion">Transit Conversion</option>
-                            <option value="UPO">UPO</option>
-                        </select>
+                        <div class="promo-controls">
+                            <select id="promoMetricSelect" class="deviation-metric-select">
+                                <option value="Net Ordered Units">Net Ordered Units</option>
+                                <option value="Transits">Transits</option>
+                                <option value="Transit Conversion">Transit Conversion</option>
+                                <option value="UPO">UPO</option>
+                            </select>
+                            <select id="promoTypeFilter" class="deviation-metric-select" style="display: none;">
+                                <option value="all">All Promo Types</option>
+                                <option value="HVE">HVE</option>
+                                <option value="Dollar Deals">Dollar Deals</option>
+                                <option value="Discount %">Discount %</option>
+                            </select>
+                        </div>
                     </div>
                     
-                    <div class="promo-legend">
+                    <div class="promo-legend" id="promoLegend">
                         <div class="promo-band-legend">
-                            <span class="legend-item"><span class="legend-color" style="background: rgba(76, 175, 80, 0.3);"></span> No/Low Promo (0-1)</span>
-                            <span class="legend-item"><span class="legend-color" style="background: rgba(255, 235, 59, 0.3);"></span> Light Promo (1.1-2)</span>
-                            <span class="legend-item"><span class="legend-color" style="background: rgba(255, 152, 0, 0.3);"></span> Medium Promo (2.1-3)</span>
-                            <span class="legend-item"><span class="legend-color" style="background: rgba(244, 67, 54, 0.3);"></span> Strong Promo (3.1-5)</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(128, 128, 128, 0.3);"></span> No Promo</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(255, 193, 7, 0.3);"></span> MEDIUM</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(255, 152, 0, 0.3);"></span> HIGH</span>
+                            <span class="legend-item"><span class="legend-color" style="background: rgba(244, 67, 54, 0.3);"></span> MEGA</span>
                         </div>
                     </div>
                     
@@ -371,9 +379,9 @@
                     </div>
                     
                     <div class="promo-info-card">
-                        <h4><i class="fas fa-info-circle"></i> How to use Promo Uplift</h4>
-                        <p>The uplift factor shows how much performance increases during promotions compared to baseline (no/low promo weeks). For example, an uplift of 1.5x means 50% increase over baseline.</p>
-                        <p>Use these factors to adjust forecasts when planning promotions.</p>
+                        <h4><i class="fas fa-info-circle"></i> How to read this</h4>
+                        <p>The <strong>Uplift by Volume Impact</strong> tables show how metric values change during promo weeks at each impact level (MEDIUM, HIGH, MEGA) vs baseline (no promo weeks). A 1.5x uplift = 50% increase.</p>
+                        <p>The <strong>Promo Type × Volume Impact</strong> cross-tab shows performance broken down by both the type of promotion (HVE, Dollar Deals, Discount %) and the expected volume impact level.</p>
                     </div>
                 </div>
             </section>
@@ -382,7 +390,7 @@
 
     <!-- Footer -->
     <footer class="footer">
-        Amazon Haul EU5 Forecasting Dashboard v2.4.0 | 85% Confidence Interval | Week format: Sunday-Saturday
+    Amazon Haul EU5 Forecasting Dashboard v2.5.0 | 85% Confidence Interval | Week format: Sunday-Saturday
     </footer>
 
     <!-- Loading Overlay -->
