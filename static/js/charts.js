@@ -1355,6 +1355,54 @@ function populateRegressorAnalysisGrid(grid) {
         html += '</div>';
     }
     
+    // === SECTION 3: Regression Fit (R²) ===
+    html += '<h3 class="promo-section-title" style="margin-top: 2rem;"><i class="fas fa-chart-line"></i> Regression Fit (R²)</h3>';
+    html += '<p class="promo-section-desc">How strongly each regressor correlates with metric changes. R² > 0.3 = strong, > 0.1 = moderate. % impact = effect per 1-unit increase relative to baseline.</p>';
+    html += '<div class="promo-matrix-container">';
+    
+    for (const metric of metrics) {
+        const analysis = state.promoAnalysis[metric];
+        if (!analysis) continue;
+        
+        html += `<div class="promo-matrix-card">`;
+        html += `<h4 class="promo-matrix-title">${metric}</h4>`;
+        html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
+        
+        for (const [regKey, regLabel] of Object.entries(regressorLabels)) {
+            html += `<th>${regLabel}</th>`;
+        }
+        html += `</tr></thead><tbody>`;
+        
+        for (const mp of mpOrder) {
+            if (!analysis[mp]) continue;
+            const coeffs = analysis[mp].regression_coefficients || {};
+            
+            html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+            
+            for (const regKey of Object.keys(regressorLabels)) {
+                const c = coeffs[regKey];
+                if (c && c.r_squared > 0) {
+                    const rSq = c.r_squared;
+                    const strengthClass = rSq > 0.3 ? 'coeff-strong' : (rSq > 0.1 ? 'coeff-moderate' : 'coeff-weak');
+                    const pctImpact = c.pct_impact || 0;
+                    const sign = pctImpact > 0 ? '+' : '';
+                    
+                    html += `<td class="${strengthClass}" title="Coefficient: ${c.coefficient}, R²: ${rSq}">`;
+                    html += `R²=${rSq.toFixed(2)} <span class="week-count">${sign}${pctImpact.toFixed(1)}%/unit</span>`;
+                    html += `</td>`;
+                } else {
+                    html += `<td class="no-data">--</td>`;
+                }
+            }
+            
+            html += `</tr>`;
+        }
+        
+        html += `</tbody></table></div>`;
+    }
+    
+    html += '</div>';
+    
     grid.innerHTML = html || '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available.</p>';
 }
 
