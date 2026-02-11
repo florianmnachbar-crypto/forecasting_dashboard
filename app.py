@@ -1148,7 +1148,14 @@ def export_csv():
 
 @app.route('/api/export/excel', methods=['GET'])
 def export_excel():
-    """Export all data as Excel file"""
+    """Export all data as Excel file with pivoted MP×Week layout.
+    
+    Sheets:
+    1. Latest Week Overview (compact)
+    2. Statistics
+    3-6. One per metric: rows = MP grouped by data series, columns = weeks
+         Data series: Actuals, Manual FC, Model FC, Model FC +Promo
+    """
     global data_processor
     
     if data_processor is None:
@@ -1158,13 +1165,19 @@ def export_excel():
         import openpyxl
         from openpyxl.styles import Font, PatternFill, Alignment, Border, Side
         from openpyxl.utils import get_column_letter
+        from datetime import timedelta
         
         wb = openpyxl.Workbook()
         
         # Styles
         header_font = Font(bold=True, color='FFFFFF')
         header_fill = PatternFill(start_color='232F3E', end_color='232F3E', fill_type='solid')
-        subheader_fill = PatternFill(start_color='37475A', end_color='37475A', fill_type='solid')
+        section_fills = {
+            'Actuals': PatternFill(start_color='1B5E20', end_color='1B5E20', fill_type='solid'),
+            'Manual FC': PatternFill(start_color='4A148C', end_color='4A148C', fill_type='solid'),
+            'Model FC': PatternFill(start_color='0D47A1', end_color='0D47A1', fill_type='solid'),
+            'Model FC +Promo': PatternFill(start_color='BF360C', end_color='BF360C', fill_type='solid'),
+        }
         good_fill = PatternFill(start_color='C6EFCE', end_color='C6EFCE', fill_type='solid')
         warn_fill = PatternFill(start_color='FFEB9C', end_color='FFEB9C', fill_type='solid')
         bad_fill = PatternFill(start_color='FFC7CE', end_color='FFC7CE', fill_type='solid')
@@ -1174,8 +1187,87 @@ def export_excel():
             top=Side(style='thin'),
             bottom=Side(style='thin')
         )
+        section_font = Font(bold=True, color='FFFFFF', size=11)
         
-        # Sheet 1: Latest Week Overview
+        mp_order = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES']
+        
+        # --- Generate model forecasts (baseline + promo) for export ---
+        forecaster = Forecaster(forecast_horizon=12)
+        model_forecasts = {}       # metric -> mp -> {dates, values}
+        model_promo_forecasts = {}  # metric -> mp -> {dates, values}
+        
+        driver_metrics = ['Transits', 'Transit Conversion', 'UPO']
+        eu5_transits_max = _get_historical_max(data_processor, 'Transits', 'EU5')
+        
+        # Generate baseline and promo forecasts for driver metrics
+        for metric in driver_metrics:
+            model_forecasts[metric] = {}
+            model_promo_forecasts[metric] = {}
+            
+            for mp in DataProcessor.MARKETPLACES:
+                df = data_processor.get_dataframe(metric, mp)
+                if df is None or df.empty or len(df) < 4:
+                    continue
+                
+                # Baseline forecast (no promo)
+                fc_base = forecaster.forecast_sarimax(df, use_seasonality=True, exog=None, future_exog=None)
+                if fc_base:
+                    # Apply caps
+                    if metric == 'Transit Conversion':
+                        fc_base = _cap_transit_conversion(fc_base)
+                    elif metric == 'Transits':
+                        mp_max = _get_historical_max(data_processor, 'Transits', mp)
+                        fc_base = _cap_transits(fc_base, mp_max, eu5_transits_max)
+                    elif metric == 'UPO':
+                        mp_max = _get_historical_max(data_processor, 'UPO', mp)
+                        fc_base = _cap_upo(fc_base, mp_max)
+                    model_forecasts[metric][mp] = fc_base
+                
+                # Promo forecast (if promo data available)
+                if data_processor.has_promo_scores:
+                    exog, future_exog, promo_info = _prepare_promo_exog(
+                        data_processor, metric, mp, df, forecaster.forecast_horizon
+                    )
+                    if exog is not None:
+                        fc_promo = forecaster.forecast_sarimax(df, use_seasonality=True, exog=exog, future_exog=future_exog)
+                        if fc_promo and fc_base and promo_info:
+                            future_scores = [item['score'] for item in promo_info.get('future_scores', [])]
+                            fc_promo = _apply_promo_floor(fc_promo, fc_base, future_scores)
+                            # Apply caps
+                            if metric == 'Transit Conversion':
+                                fc_promo = _cap_transit_conversion(fc_promo)
+                            elif metric == 'Transits':
+                                mp_max = _get_historical_max(data_processor, 'Transits', mp)
+                                fc_promo = _cap_transits(fc_promo, mp_max, eu5_transits_max)
+                            elif metric == 'UPO':
+                                mp_max = _get_historical_max(data_processor, 'UPO', mp)
+                                fc_promo = _cap_upo(fc_promo, mp_max)
+                            model_promo_forecasts[metric][mp] = fc_promo
+        
+        # Derive Net Ordered Units from driver forecasts
+        for fc_dict in [model_forecasts, model_promo_forecasts]:
+            fc_dict['Net Ordered Units'] = {}
+            for mp in DataProcessor.MARKETPLACES:
+                t = fc_dict.get('Transits', {}).get(mp)
+                c = fc_dict.get('Transit Conversion', {}).get(mp)
+                u = fc_dict.get('UPO', {}).get(mp)
+                if t and c and u:
+                    nou_vals = [t['values'][i] * c['values'][i] * u['values'][i] for i in range(len(t['values']))]
+                    fc_dict['Net Ordered Units'][mp] = {
+                        'dates': t['dates'],
+                        'values': [max(0, v) for v in nou_vals]
+                    }
+        
+        # Helper: convert forecast date strings to week labels
+        def dates_to_weeks(date_strs):
+            weeks = []
+            for ds in date_strs:
+                d = datetime.strptime(ds, '%Y-%m-%d')
+                wl = data_processor.format_week_label(d)
+                weeks.append(wl)
+            return weeks
+        
+        # --- Sheet 1: Latest Week Overview ---
         ws1 = wb.active
         ws1.title = 'Latest Week Overview'
         
@@ -1184,7 +1276,6 @@ def export_excel():
             ws1['A1'] = f'Latest Week: {overview["latest_week"]}'
             ws1['A1'].font = Font(bold=True, size=14)
             
-            # Header row
             row = 3
             headers = ['Marketplace']
             for metric in DataProcessor.METRICS:
@@ -1197,38 +1288,25 @@ def export_excel():
                 cell.alignment = Alignment(horizontal='center', vertical='center', wrap_text=True)
                 cell.border = thin_border
                 ws1.column_dimensions[get_column_letter(col)].width = 12
-            
             ws1.row_dimensions[row].height = 40
             
-            # Data rows
-            for mp in ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES']:
+            for mp in mp_order:
                 if mp in overview.get('data', {}):
                     row += 1
                     col = 1
                     ws1.cell(row=row, column=col, value=mp).border = thin_border
-                    
                     for metric in DataProcessor.METRICS:
                         mp_data = overview['data'][mp].get(metric, {})
                         actual = mp_data.get('actual')
                         forecast = mp_data.get('manual_forecast')
                         deviation = mp_data.get('manual_dev_pct')
-                        
                         col += 1
-                        cell = ws1.cell(row=row, column=col, value=actual if actual is not None else '')
-                        cell.border = thin_border
-                        cell.alignment = Alignment(horizontal='right')
-                        
+                        ws1.cell(row=row, column=col, value=actual if actual is not None else '').border = thin_border
                         col += 1
-                        cell = ws1.cell(row=row, column=col, value=forecast if forecast is not None else '')
-                        cell.border = thin_border
-                        cell.alignment = Alignment(horizontal='right')
-                        
+                        ws1.cell(row=row, column=col, value=forecast if forecast is not None else '').border = thin_border
                         col += 1
                         cell = ws1.cell(row=row, column=col, value=f'{deviation:.1f}%' if deviation is not None else '')
                         cell.border = thin_border
-                        cell.alignment = Alignment(horizontal='right')
-                        
-                        # Color code deviation
                         if deviation is not None:
                             abs_dev = abs(deviation)
                             if abs_dev < 20:
@@ -1238,22 +1316,18 @@ def export_excel():
                             else:
                                 cell.fill = bad_fill
         
-        # Sheet 2: Statistics
+        # --- Sheet 2: Statistics ---
         ws2 = wb.create_sheet('Statistics')
         row = 1
-        
         for metric in DataProcessor.METRICS:
             ws2.cell(row=row, column=1, value=metric).font = Font(bold=True, size=12)
             row += 1
-            
-            headers = ['Marketplace', 'Total', 'Average', 'Min', 'Max', 'T4W Total', 'T4W Average']
-            for col, header in enumerate(headers, 1):
-                cell = ws2.cell(row=row, column=col, value=header)
+            for col, h in enumerate(['Marketplace', 'Total', 'Average', 'Min', 'Max', 'Std Dev', 'Weeks'], 1):
+                cell = ws2.cell(row=row, column=col, value=h)
                 cell.font = header_font
                 cell.fill = header_fill
                 cell.border = thin_border
                 ws2.column_dimensions[get_column_letter(col)].width = 14
-            
             row += 1
             for mp in DataProcessor.MARKETPLACES:
                 stats = data_processor.get_summary_statistics(metric, mp)
@@ -1263,57 +1337,148 @@ def export_excel():
                     ws2.cell(row=row, column=3, value=stats.get('average', 0)).border = thin_border
                     ws2.cell(row=row, column=4, value=stats.get('min', 0)).border = thin_border
                     ws2.cell(row=row, column=5, value=stats.get('max', 0)).border = thin_border
-                    ws2.cell(row=row, column=6, value=stats.get('t4w_total', 0)).border = thin_border
-                    ws2.cell(row=row, column=7, value=stats.get('t4w_avg', 0)).border = thin_border
+                    ws2.cell(row=row, column=6, value=stats.get('std_dev', 0)).border = thin_border
+                    ws2.cell(row=row, column=7, value=stats.get('count', 0)).border = thin_border
                     row += 1
-            
             row += 2
         
-        # Sheet 3-6: Historical Data for each metric
+        # --- Sheets 3-6: Pivoted MP×Week per metric ---
         all_data = data_processor.get_all_data()
+        manual_fc_data = data_processor.get_manual_forecast_data() if data_processor.has_manual_forecast else None
         
         for metric in DataProcessor.METRICS:
-            # Clean sheet name (Excel limits to 31 chars)
-            sheet_name = metric[:31] if len(metric) > 31 else metric
+            sheet_name = metric[:31]
             ws = wb.create_sheet(sheet_name)
             
+            # Collect all weeks across all series
+            all_weeks = set()
+            
+            # From actuals
             if metric in all_data:
-                metric_data = all_data[metric]
-                
-                # Collect all unique weeks
-                all_weeks = set()
-                for mp, mp_data in metric_data.items():
+                for mp, mp_data in all_data[metric].items():
                     if isinstance(mp_data, dict) and 'weeks' in mp_data:
                         all_weeks.update(mp_data['weeks'])
+            
+            # From manual forecast
+            if manual_fc_data and metric in manual_fc_data:
+                for mp, mp_data in manual_fc_data[metric].items():
+                    if isinstance(mp_data, dict) and 'weeks' in mp_data:
+                        all_weeks.update(mp_data['weeks'])
+            
+            # From model forecast
+            if metric in model_forecasts:
+                for mp, fc in model_forecasts[metric].items():
+                    if fc and 'dates' in fc:
+                        all_weeks.update(dates_to_weeks(fc['dates']))
+            
+            # From model forecast +promo
+            if metric in model_promo_forecasts:
+                for mp, fc in model_promo_forecasts[metric].items():
+                    if fc and 'dates' in fc:
+                        all_weeks.update(dates_to_weeks(fc['dates']))
+            
+            all_weeks = sorted(list(all_weeks))
+            if not all_weeks:
+                continue
+            
+            week_col_map = {w: idx + 2 for idx, w in enumerate(all_weeks)}  # col 1 = label, col 2+ = weeks
+            
+            # Write week header row
+            ws.cell(row=1, column=1, value='Series / MP').font = Font(bold=True)
+            ws.column_dimensions['A'].width = 18
+            for w, col_idx in week_col_map.items():
+                cell = ws.cell(row=1, column=col_idx, value=w)
+                cell.font = header_font
+                cell.fill = header_fill
+                cell.alignment = Alignment(horizontal='center')
+                cell.border = thin_border
+                ws.column_dimensions[get_column_letter(col_idx)].width = 12
+            
+            current_row = 2
+            
+            # Helper to write a section
+            def write_section(section_name, data_getter, fill):
+                nonlocal current_row
+                # Section header row
+                cell = ws.cell(row=current_row, column=1, value=section_name)
+                cell.font = section_font
+                cell.fill = fill
+                # Fill the header across all week columns
+                for col_idx in range(2, 2 + len(all_weeks)):
+                    ws.cell(row=current_row, column=col_idx).fill = fill
+                    ws.cell(row=current_row, column=col_idx).border = thin_border
+                cell.border = thin_border
+                current_row += 1
                 
-                all_weeks = sorted(list(all_weeks))
-                
-                if all_weeks:
-                    # Header
-                    headers = ['Week'] + DataProcessor.MARKETPLACES
-                    for col, header in enumerate(headers, 1):
-                        cell = ws.cell(row=1, column=col, value=header)
-                        cell.font = header_font
-                        cell.fill = header_fill
-                        cell.border = thin_border
-                        ws.column_dimensions[get_column_letter(col)].width = 14
+                # MP rows
+                for mp in mp_order:
+                    values_by_week = data_getter(mp)
+                    if not values_by_week:
+                        continue
                     
-                    # Data rows
-                    for row_idx, week in enumerate(all_weeks, 2):
-                        ws.cell(row=row_idx, column=1, value=week).border = thin_border
-                        
-                        for col_idx, mp in enumerate(DataProcessor.MARKETPLACES, 2):
-                            value = ''
-                            if mp in metric_data and isinstance(metric_data[mp], dict):
-                                weeks = metric_data[mp].get('weeks', [])
-                                values = metric_data[mp].get('values', [])
-                                if week in weeks:
-                                    idx = weeks.index(week)
-                                    if idx < len(values):
-                                        value = values[idx]
-                            
-                            cell = ws.cell(row=row_idx, column=col_idx, value=value if value != '' else None)
-                            cell.border = thin_border
+                    ws.cell(row=current_row, column=1, value=mp).border = thin_border
+                    for w, col_idx in week_col_map.items():
+                        val = values_by_week.get(w)
+                        cell = ws.cell(row=current_row, column=col_idx, value=val)
+                        cell.border = thin_border
+                        if val is not None:
+                            cell.alignment = Alignment(horizontal='right')
+                    current_row += 1
+                
+                current_row += 1  # Blank row between sections
+            
+            # Section 1: Actuals
+            def get_actuals(mp):
+                if metric not in all_data or mp not in all_data[metric]:
+                    return None
+                mp_data = all_data[metric][mp]
+                if not isinstance(mp_data, dict):
+                    return None
+                weeks = mp_data.get('weeks', [])
+                values = mp_data.get('values', [])
+                return {w: values[i] for i, w in enumerate(weeks) if i < len(values)}
+            
+            write_section('Actuals', get_actuals, section_fills['Actuals'])
+            
+            # Section 2: Manual FC
+            if manual_fc_data and metric in manual_fc_data:
+                def get_manual_fc(mp):
+                    if mp not in manual_fc_data.get(metric, {}):
+                        return None
+                    mp_data = manual_fc_data[metric][mp]
+                    if not isinstance(mp_data, dict):
+                        return None
+                    weeks = mp_data.get('weeks', [])
+                    values = mp_data.get('values', [])
+                    return {w: values[i] for i, w in enumerate(weeks) if i < len(values)}
+                
+                write_section('Manual FC', get_manual_fc, section_fills['Manual FC'])
+            
+            # Section 3: Model FC (baseline)
+            if metric in model_forecasts and model_forecasts[metric]:
+                def get_model_fc(mp):
+                    fc = model_forecasts.get(metric, {}).get(mp)
+                    if not fc or 'dates' not in fc:
+                        return None
+                    weeks = dates_to_weeks(fc['dates'])
+                    values = fc['values']
+                    return {w: round(values[i], 4 if metric == 'Transit Conversion' else 2) 
+                            for i, w in enumerate(weeks) if i < len(values)}
+                
+                write_section('Model FC', get_model_fc, section_fills['Model FC'])
+            
+            # Section 4: Model FC +Promo
+            if data_processor.has_promo_scores and metric in model_promo_forecasts and model_promo_forecasts[metric]:
+                def get_model_promo_fc(mp):
+                    fc = model_promo_forecasts.get(metric, {}).get(mp)
+                    if not fc or 'dates' not in fc:
+                        return None
+                    weeks = dates_to_weeks(fc['dates'])
+                    values = fc['values']
+                    return {w: round(values[i], 4 if metric == 'Transit Conversion' else 2) 
+                            for i, w in enumerate(weeks) if i < len(values)}
+                
+                write_section('Model FC +Promo', get_model_promo_fc, section_fills['Model FC +Promo'])
         
         # Save to bytes
         output = io.BytesIO()
