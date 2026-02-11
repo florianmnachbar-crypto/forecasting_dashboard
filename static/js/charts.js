@@ -1,5 +1,5 @@
 /**
- * Amazon Haul EU5 Forecasting Dashboard - Charts v2.4.0
+ * Amazon Haul EU5 Forecasting Dashboard - Charts v2.5.0
  * Handles data visualization, theme switching, and user interactions
  */
 
@@ -577,7 +577,8 @@ async function loadPromoData() {
             
             if (analysisResult.success && analysisResult.analysis) {
                 state.promoAnalysis = analysisResult.analysis;
-                console.log('Promo analysis loaded for metrics:', Object.keys(state.promoAnalysis));
+                state.promoFormat = analysisResult.promo_format || 'legacy';
+                console.log('Promo analysis loaded:', state.promoFormat, 'format, metrics:', Object.keys(state.promoAnalysis));
             }
             
             // Load forecast uplift data
@@ -1165,11 +1166,147 @@ function renderChart(marketplace, metric, isModal = false) {
     Plotly.newPlot(container, traces, layout, config);
 }
 
-// Populate promo analysis grid
+// Populate promo analysis grid - handles both regressor and legacy formats
 function populatePromoAnalysisGrid() {
     const grid = document.getElementById('promoAnalysisGrid');
     if (!grid || !state.promoAnalysis) return;
     
+    // Detect format
+    if (state.promoFormat === 'regressors') {
+        populateRegressorAnalysisGrid(grid);
+    } else {
+        populateLegacyPromoGrid(grid);
+    }
+}
+
+function populateRegressorAnalysisGrid(grid) {
+    const metrics = ['Net Ordered Units', 'Transits', 'Transit Conversion', 'UPO'];
+    const mpOrder = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
+    const mpNames = {
+        'UK': 'United Kingdom', 'DE': 'Germany', 'FR': 'France',
+        'IT': 'Italy', 'ES': 'Spain', 'EU5': 'EU5 (All)'
+    };
+    
+    const impactLabels = ['No Promo', 'MEDIUM', 'HIGH', 'MEGA'];
+    const impactColors = {
+        'No Promo': '#6c757d', 'MEDIUM': '#ffc107', 'HIGH': '#ff9800', 'MEGA': '#f44336'
+    };
+    
+    const regressorLabels = {
+        'promo_type': 'Promo Type',
+        'discount_pct': 'Discount %',
+        'volume_impact': 'Volume Impact',
+        'promo_count': 'Promo Count'
+    };
+    
+    let html = '';
+    
+    // === SECTION 1: Uplift by Volume Impact Matrix ===
+    html += '<h3 class="promo-section-title"><i class="fas fa-chart-bar"></i> Uplift by Volume Impact Level</h3>';
+    html += '<div class="promo-matrix-container">';
+    
+    for (const metric of metrics) {
+        const analysis = state.promoAnalysis[metric];
+        if (!analysis) continue;
+        
+        html += `<div class="promo-matrix-card">`;
+        html += `<h4 class="promo-matrix-title">${metric}</h4>`;
+        html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
+        
+        for (const impact of impactLabels) {
+            const color = impactColors[impact];
+            html += `<th><span style="color: ${color};">${impact}</span></th>`;
+        }
+        html += `<th>Baseline</th></tr></thead><tbody>`;
+        
+        for (const mp of mpOrder) {
+            if (!analysis[mp]) continue;
+            const mpData = analysis[mp];
+            const upliftByImpact = mpData.uplift_by_impact || {};
+            
+            html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+            
+            for (const impact of impactLabels) {
+                const data = upliftByImpact[impact];
+                if (data && data.count > 0) {
+                    const upliftPct = data.uplift_pct || 0;
+                    const upliftClass = impact === 'No Promo' ? '' : 
+                        (upliftPct > 10 ? 'uplift-positive' : (upliftPct < -10 ? 'uplift-negative' : 'uplift-neutral'));
+                    const sign = upliftPct > 0 ? '+' : '';
+                    
+                    html += `<td class="${upliftClass}" title="${data.count} weeks, avg: ${formatNumber(data.average)}">`;
+                    if (impact === 'No Promo') {
+                        html += `${formatNumber(data.average)} <span class="week-count">(${data.count}w)</span>`;
+                    } else {
+                        html += `${data.uplift_factor ? data.uplift_factor.toFixed(2) + 'x' : '--'} <span class="week-count">(${sign}${upliftPct.toFixed(0)}%)</span>`;
+                    }
+                    html += `</td>`;
+                } else {
+                    html += `<td class="no-data">--</td>`;
+                }
+            }
+            
+            html += `<td>${mpData.baseline_avg ? formatNumber(mpData.baseline_avg) : '--'}</td>`;
+            html += `</tr>`;
+        }
+        
+        html += `</tbody></table></div>`;
+    }
+    
+    html += '</div>';
+    
+    // === SECTION 2: Regression Coefficients Matrix ===
+    html += '<h3 class="promo-section-title" style="margin-top: 2rem;"><i class="fas fa-chart-line"></i> Regression Coefficients</h3>';
+    html += '<p class="promo-section-desc">How each regressor correlates with metric changes. Higher R² = stronger relationship.</p>';
+    html += '<div class="promo-matrix-container">';
+    
+    for (const metric of metrics) {
+        const analysis = state.promoAnalysis[metric];
+        if (!analysis) continue;
+        
+        html += `<div class="promo-matrix-card">`;
+        html += `<h4 class="promo-matrix-title">${metric}</h4>`;
+        html += `<table class="promo-matrix-table"><thead><tr><th>MP</th>`;
+        
+        for (const [regKey, regLabel] of Object.entries(regressorLabels)) {
+            html += `<th>${regLabel}</th>`;
+        }
+        html += `</tr></thead><tbody>`;
+        
+        for (const mp of mpOrder) {
+            if (!analysis[mp]) continue;
+            const coeffs = analysis[mp].regression_coefficients || {};
+            
+            html += `<tr><td><span class="mp-flag ${mp.toLowerCase()}">${mp}</span></td>`;
+            
+            for (const regKey of Object.keys(regressorLabels)) {
+                const c = coeffs[regKey];
+                if (c && c.r_squared > 0) {
+                    const rSq = c.r_squared;
+                    const strengthClass = rSq > 0.3 ? 'coeff-strong' : (rSq > 0.1 ? 'coeff-moderate' : 'coeff-weak');
+                    const pctImpact = c.pct_impact || 0;
+                    const sign = pctImpact > 0 ? '+' : '';
+                    
+                    html += `<td class="${strengthClass}" title="Coefficient: ${c.coefficient}, R²: ${rSq}">`;
+                    html += `${sign}${pctImpact.toFixed(1)}% <span class="r-squared">R²=${rSq.toFixed(2)}</span>`;
+                    html += `</td>`;
+                } else {
+                    html += `<td class="no-data">--</td>`;
+                }
+            }
+            
+            html += `</tr>`;
+        }
+        
+        html += `</tbody></table></div>`;
+    }
+    
+    html += '</div>';
+    
+    grid.innerHTML = html || '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available.</p>';
+}
+
+function populateLegacyPromoGrid(grid) {
     const metric = document.getElementById('promoMetricSelect')?.value || 'Net Ordered Units';
     const analysis = state.promoAnalysis[metric];
     
@@ -1179,12 +1316,8 @@ function populatePromoAnalysisGrid() {
     }
     
     const mpNames = {
-        'UK': 'United Kingdom',
-        'DE': 'Germany', 
-        'FR': 'France',
-        'IT': 'Italy',
-        'ES': 'Spain',
-        'EU5': 'EU5 (All)'
+        'UK': 'United Kingdom', 'DE': 'Germany', 'FR': 'France',
+        'IT': 'Italy', 'ES': 'Spain', 'EU5': 'EU5 (All)'
     };
     
     let html = '';
@@ -1192,70 +1325,38 @@ function populatePromoAnalysisGrid() {
     
     for (const mp of mpOrder) {
         if (!analysis[mp]) continue;
-        
         const mpData = analysis[mp];
         const bands = mpData.bands || {};
         
         html += `
             <div class="promo-card">
                 <div class="promo-card-header">
-                    <h4>
-                        <div class="mp-flag ${mp.toLowerCase()}">${mp}</div>
-                        ${mpNames[mp]}
-                    </h4>
+                    <h4><div class="mp-flag ${mp.toLowerCase()}">${mp}</div>${mpNames[mp]}</h4>
                     <span style="color: var(--text-muted); font-size: 0.85rem;">${mpData.total_weeks_analyzed || 0} weeks</span>
                 </div>
-                <table class="promo-band-table">
-                    <thead>
-                        <tr>
-                            <th>Promo Band</th>
-                            <th>Avg</th>
-                            <th>Uplift</th>
-                            <th>Weeks</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-        `;
+                <table class="promo-band-table"><thead><tr>
+                    <th>Promo Band</th><th>Avg</th><th>Uplift</th><th>Weeks</th>
+                </tr></thead><tbody>`;
         
         const bandOrder = ['No/Low Promo', 'Light Promo', 'Medium Promo', 'Strong Promo'];
-        const bandClasses = {
-            'No/Low Promo': 'no-promo',
-            'Light Promo': 'light-promo',
-            'Medium Promo': 'medium-promo',
-            'Strong Promo': 'strong-promo'
-        };
+        const bandClasses = {'No/Low Promo': 'no-promo', 'Light Promo': 'light-promo', 'Medium Promo': 'medium-promo', 'Strong Promo': 'strong-promo'};
         
         for (const bandLabel of bandOrder) {
             const band = bands[bandLabel];
             if (!band) continue;
-            
             const upliftPct = band.uplift_pct || 0;
             const upliftClass = upliftPct > 5 ? 'uplift-positive' : (upliftPct < -5 ? 'uplift-negative' : 'uplift-neutral');
             const upliftSign = upliftPct > 0 ? '+' : '';
             
-            html += `
-                <tr>
-                    <td>
-                        <span class="promo-band-name">
-                            <span class="promo-band-dot ${bandClasses[bandLabel]}"></span>
-                            ${bandLabel}
-                        </span>
-                    </td>
-                    <td>${formatNumber(band.average)}</td>
-                    <td class="uplift-value ${upliftClass}">${band.uplift_factor ? band.uplift_factor.toFixed(2) + 'x' : '1.00x'} (${upliftSign}${upliftPct.toFixed(0)}%)</td>
-                    <td>${band.count}</td>
-                </tr>
-            `;
+            html += `<tr><td><span class="promo-band-name"><span class="promo-band-dot ${bandClasses[bandLabel]}"></span>${bandLabel}</span></td>
+                <td>${formatNumber(band.average)}</td>
+                <td class="uplift-value ${upliftClass}">${band.uplift_factor ? band.uplift_factor.toFixed(2) + 'x' : '1.00x'} (${upliftSign}${upliftPct.toFixed(0)}%)</td>
+                <td>${band.count}</td></tr>`;
         }
         
-        html += `
-                    </tbody>
-                </table>
-                <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">
-                    Baseline: ${formatNumber(mpData.baseline_avg)} avg
-                </div>
-            </div>
-        `;
+        html += `</tbody></table>
+            <div style="margin-top: 0.75rem; font-size: 0.8rem; color: var(--text-muted);">Baseline: ${formatNumber(mpData.baseline_avg)} avg</div>
+            </div>`;
     }
     
     grid.innerHTML = html || '<p style="text-align: center; color: var(--text-muted);">No promo analysis data available.</p>';

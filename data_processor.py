@@ -21,7 +21,26 @@ class DataProcessor:
     }
     MARKETPLACES = ['UK', 'DE', 'FR', 'IT', 'ES', 'EU5']
     
-    # Promo score bands for analysis
+    # Volume impact bands for analysis
+    VOLUME_IMPACT_BANDS = [
+        (0, 0, 'No Promo'),
+        (1, 1, 'MEDIUM'),
+        (2, 2, 'HIGH'),
+        (3, 3, 'MEGA'),
+    ]
+    
+    # Promo type labels (re-encoded: higher = more impactful)
+    PROMO_TYPE_LABELS = {
+        0: 'None',
+        1: 'Discount %',
+        2: 'Dollar Deals',
+        3: 'HVE',
+    }
+    
+    # Regressor names
+    PROMO_REGRESSOR_NAMES = ['promo_type', 'discount_pct', 'volume_impact', 'promo_count']
+    
+    # Legacy promo score bands (for backward compatibility)
     PROMO_BANDS = [
         (0, 1, 'No/Low Promo'),
         (1.1, 2, 'Light Promo'),
@@ -32,13 +51,15 @@ class DataProcessor:
     def __init__(self):
         self.data = {}  # Actuals data
         self.manual_forecast = {}  # Manual forecast data
-        self.promo_scores = {}  # Promo scores by marketplace and week
+        self.promo_regressors = {}  # New: dict[mp][week] = {promo_type, discount_pct, volume_impact, promo_count}
+        self.promo_scores = {}  # Legacy: single score per week per MP
         self.promo_descriptions = {}  # Campaign descriptions
         self.weeks = []
         self.forecast_weeks = []
         self.raw_df = None
         self.has_manual_forecast = False
         self.has_promo_scores = False
+        self.promo_format = None  # 'regressors' or 'legacy'
         
     def parse_week_column(self, col_name):
         """Convert week column name to datetime"""
@@ -113,8 +134,10 @@ class DataProcessor:
             if 'Forecast' in sheet_names:
                 self._load_manual_forecast(file_path, 'Forecast')
             
-            # Load promo scores if available
-            if 'Promo Scores' in sheet_names:
+            # Load promo data - prefer new Promo Regressors format, fall back to legacy
+            if 'Promo Regressors' in sheet_names:
+                self.load_promo_regressors(file_path)
+            elif 'Promo Scores' in sheet_names:
                 self.load_promo_scores(file_path)
             
             return True, "File loaded successfully"
@@ -681,6 +704,318 @@ class DataProcessor:
             source_name = "forecast" if is_forecast else "actuals"
             print(f"  EU5 ({metric}) [{source_name}]: {valid_count} valid data points (calculated)")
     
+    def load_promo_regressors(self, file_path):
+        """Load 4-column promo regressors from 'Promo Regressors' sheet.
+        
+        Sheet format (sections for each regressor):
+        promo_type
+        MP | Wk21 2025 | Wk22 2025 | ...
+        UK |     3     |     0     | ...
+        ...EU5| ...
+        
+        discount_pct
+        MP | Wk21 2025 | ...
+        ...
+        
+        volume_impact
+        ...
+        
+        promo_count
+        ...
+        """
+        try:
+            df = pd.read_excel(file_path, sheet_name='Promo Regressors', header=None)
+            print(f"Promo Regressors sheet: {df.shape[0]} rows, {df.shape[1]} columns")
+            
+            self.promo_regressors = {}
+            self.promo_format = 'regressors'
+            
+            # Parse each regressor section
+            regressor_data = {}  # regressor_name -> {mp -> {week -> value}}
+            
+            for regressor_name in self.PROMO_REGRESSOR_NAMES:
+                regressor_data[regressor_name] = {}
+                
+                # Find the section header row
+                section_row = None
+                for row_idx in range(len(df)):
+                    cell = df.iloc[row_idx, 0]
+                    if pd.notna(cell) and str(cell).strip() == regressor_name:
+                        section_row = row_idx
+                        break
+                
+                if section_row is None:
+                    print(f"  Warning: Could not find section for '{regressor_name}'")
+                    continue
+                
+                # Next row should be MP header with week columns
+                mp_row = section_row + 1
+                if mp_row >= len(df):
+                    continue
+                
+                mp_cell = df.iloc[mp_row, 0]
+                if pd.isna(mp_cell) or str(mp_cell).strip() != 'MP':
+                    print(f"  Warning: Expected 'MP' at row {mp_row}, got '{mp_cell}'")
+                    continue
+                
+                # Parse week columns
+                week_col_map = {}
+                for col_idx in range(1, len(df.columns)):
+                    header = df.iloc[mp_row, col_idx]
+                    if pd.isna(header) or str(header).strip() == '':
+                        continue
+                    header_str = str(header).strip()
+                    normalized = self._normalize_promo_week(header_str)
+                    if normalized:
+                        week_col_map[col_idx] = normalized
+                
+                if not week_col_map:
+                    print(f"  Warning: No week columns found for '{regressor_name}'")
+                    continue
+                
+                # Parse MP data rows (including EU5)
+                for row_idx in range(mp_row + 1, min(mp_row + 10, len(df))):
+                    mp_val = df.iloc[row_idx, 0]
+                    if pd.isna(mp_val):
+                        continue
+                    mp_name = str(mp_val).strip()
+                    
+                    if mp_name in self.MARKETPLACES:
+                        regressor_data[regressor_name][mp_name] = {}
+                        for col_idx, week_label in week_col_map.items():
+                            val = df.iloc[row_idx, col_idx]
+                            if pd.notna(val):
+                                try:
+                                    regressor_data[regressor_name][mp_name][week_label] = float(val)
+                                except (ValueError, TypeError):
+                                    regressor_data[regressor_name][mp_name][week_label] = 0
+                            else:
+                                regressor_data[regressor_name][mp_name][week_label] = 0
+                    elif mp_name in self.PROMO_REGRESSOR_NAMES:
+                        break  # Reached next section
+                
+                mp_count = len(regressor_data[regressor_name])
+                week_count = max((len(v) for v in regressor_data[regressor_name].values()), default=0)
+                print(f"  Parsed {regressor_name}: {mp_count} MPs, {week_count} weeks")
+            
+            # Restructure: mp -> week -> {regressor_name: value}
+            all_mps = set()
+            all_weeks = set()
+            for reg_name, mp_data in regressor_data.items():
+                for mp, week_data in mp_data.items():
+                    all_mps.add(mp)
+                    all_weeks.update(week_data.keys())
+            
+            for mp in all_mps:
+                self.promo_regressors[mp] = {}
+                for week in all_weeks:
+                    entry = {}
+                    for reg_name in self.PROMO_REGRESSOR_NAMES:
+                        entry[reg_name] = regressor_data.get(reg_name, {}).get(mp, {}).get(week, 0)
+                    # Only include weeks with at least one non-zero regressor
+                    if any(v != 0 for v in entry.values()):
+                        self.promo_regressors[mp][week] = entry
+            
+            # Also populate legacy promo_scores for backward compatibility
+            # Use volume_impact as the legacy score (0-3)
+            self.promo_scores = {}
+            for mp in self.promo_regressors:
+                self.promo_scores[mp] = {}
+                for week, regs in self.promo_regressors[mp].items():
+                    self.promo_scores[mp][week] = regs.get('volume_impact', 0)
+            
+            if self.promo_regressors:
+                self.has_promo_scores = True
+                total_weeks = max((len(v) for v in self.promo_regressors.values()), default=0)
+                print(f"  Promo regressors loaded: {len(self.promo_regressors)} MPs, {total_weeks} weeks")
+                return True
+            
+            return False
+            
+        except Exception as e:
+            import traceback
+            traceback.print_exc()
+            print(f"Warning: Could not load promo regressors: {str(e)}")
+            return False
+    
+    def get_promo_regressors_for_week(self, marketplace, week_label):
+        """Get the 4 promo regressor values for a specific marketplace and week.
+        
+        Returns dict with keys: promo_type, discount_pct, volume_impact, promo_count
+        or None if no data.
+        """
+        if not self.promo_regressors:
+            return None
+        
+        if marketplace not in self.promo_regressors:
+            return None
+        
+        mp_data = self.promo_regressors[marketplace]
+        
+        # Try exact match
+        if week_label in mp_data:
+            return mp_data[week_label]
+        
+        # Try normalized match
+        normalized = self._normalize_promo_week(week_label)
+        if normalized and normalized in mp_data:
+            return mp_data[normalized]
+        
+        return None
+    
+    def get_promo_regressors_data(self):
+        """Get promo regressors in structured format for the frontend."""
+        if not self.promo_regressors:
+            return None
+        
+        return {
+            'regressors': self.promo_regressors,
+            'regressor_names': self.PROMO_REGRESSOR_NAMES,
+            'promo_type_labels': self.PROMO_TYPE_LABELS,
+            'volume_impact_bands': [
+                {'value': b[0], 'label': b[2]} for b in self.VOLUME_IMPACT_BANDS
+            ],
+            'format': 'regressors'
+        }
+    
+    def calculate_regressor_uplift_analysis(self, metric='Net Ordered Units'):
+        """Calculate uplift analysis using the new 4-regressor format.
+        
+        Groups historical data by volume_impact level and calculates average 
+        metric values per group per marketplace. Also computes regression 
+        coefficients for each regressor.
+        
+        Returns per-MP analysis with:
+        - uplift_by_impact: avg metric value per volume_impact level
+        - regression_coefficients: coefficient per regressor
+        - baseline_avg: average metric value when no promo active
+        """
+        if not self.promo_regressors or not self.data:
+            return None
+        
+        result = {}
+        
+        for mp in self.MARKETPLACES:
+            df = self.get_dataframe(metric, mp, is_forecast=False)
+            if df is None or df.empty:
+                continue
+            
+            # Collect data points with their regressor values
+            data_points = []
+            
+            for _, row in df.iterrows():
+                week_label = self.format_week_label(row['ds'])
+                regs = self.get_promo_regressors_for_week(mp, week_label)
+                
+                if regs is not None:
+                    data_points.append({
+                        'week': week_label,
+                        'value': row['y'],
+                        **regs
+                    })
+                else:
+                    # No promo data = baseline week
+                    data_points.append({
+                        'week': week_label,
+                        'value': row['y'],
+                        'promo_type': 0,
+                        'discount_pct': 0,
+                        'volume_impact': 0,
+                        'promo_count': 0,
+                    })
+            
+            if not data_points:
+                continue
+            
+            # Group by volume impact level
+            impact_groups = {}
+            for band_val, _, band_label in self.VOLUME_IMPACT_BANDS:
+                impact_groups[band_label] = [dp for dp in data_points if dp['volume_impact'] == band_val]
+            
+            # Calculate stats per impact level
+            uplift_by_impact = {}
+            baseline_avg = None
+            
+            for label, group in impact_groups.items():
+                if not group:
+                    continue
+                values = [dp['value'] for dp in group]
+                avg = np.mean(values)
+                
+                uplift_by_impact[label] = {
+                    'count': len(group),
+                    'average': round(avg, 2),
+                    'min': round(min(values), 2),
+                    'max': round(max(values), 2),
+                }
+                
+                if label == 'No Promo':
+                    baseline_avg = avg
+            
+            # Calculate uplift factors
+            if baseline_avg and baseline_avg > 0:
+                for label in uplift_by_impact:
+                    uplift = uplift_by_impact[label]['average'] / baseline_avg
+                    uplift_by_impact[label]['uplift_factor'] = round(uplift, 2)
+                    uplift_by_impact[label]['uplift_pct'] = round((uplift - 1) * 100, 1)
+            
+            # Calculate regression coefficients for each regressor
+            regression_coeffs = {}
+            if len(data_points) >= 4:
+                values_arr = np.array([dp['value'] for dp in data_points])
+                mean_y = np.mean(values_arr)
+                
+                for reg_name in self.PROMO_REGRESSOR_NAMES:
+                    reg_arr = np.array([dp[reg_name] for dp in data_points])
+                    
+                    # Skip if no variance in regressor
+                    if np.std(reg_arr) == 0:
+                        regression_coeffs[reg_name] = {'coefficient': 0, 'r_squared': 0}
+                        continue
+                    
+                    # Simple linear regression
+                    mean_x = np.mean(reg_arr)
+                    num = np.sum((reg_arr - mean_x) * (values_arr - mean_y))
+                    den = np.sum((reg_arr - mean_x) ** 2)
+                    
+                    if den == 0:
+                        regression_coeffs[reg_name] = {'coefficient': 0, 'r_squared': 0}
+                        continue
+                    
+                    coeff = num / den
+                    intercept = mean_y - coeff * mean_x
+                    predicted = intercept + coeff * reg_arr
+                    ss_res = np.sum((values_arr - predicted) ** 2)
+                    ss_tot = np.sum((values_arr - mean_y) ** 2)
+                    r_sq = 1 - (ss_res / ss_tot) if ss_tot > 0 else 0
+                    
+                    regression_coeffs[reg_name] = {
+                        'coefficient': round(coeff, 4),
+                        'r_squared': round(max(0, r_sq), 4),
+                        'pct_impact': round(coeff / baseline_avg * 100, 2) if baseline_avg and baseline_avg > 0 else 0,
+                    }
+            
+            result[mp] = {
+                'uplift_by_impact': uplift_by_impact,
+                'regression_coefficients': regression_coeffs,
+                'baseline_avg': round(baseline_avg, 2) if baseline_avg else None,
+                'total_weeks': len(data_points),
+            }
+        
+        return result
+    
+    def get_all_regressor_analysis(self):
+        """Get regressor-based promo analysis for all metrics."""
+        if not self.promo_regressors:
+            return None
+        
+        result = {}
+        for metric in self.METRICS:
+            analysis = self.calculate_regressor_uplift_analysis(metric)
+            if analysis:
+                result[metric] = analysis
+        return result
+
     def load_promo_scores(self, file_path):
         """Load promo scores from the 'Promo Scores' sheet"""
         try:

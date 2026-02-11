@@ -1661,6 +1661,130 @@ input:checked + .toggle-slider::before {
     color: var(--text-secondary);
 }
 
+/* Promo Regressor Matrix Styles */
+.promo-section-title {
+    font-size: 1.1rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.promo-section-title i {
+    color: var(--primary);
+}
+
+.promo-section-desc {
+    font-size: 0.85rem;
+    color: var(--text-muted);
+    margin-bottom: 1rem;
+}
+
+.promo-matrix-container {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.promo-matrix-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    padding: 1.25rem;
+    overflow-x: auto;
+}
+
+.promo-matrix-title {
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: var(--text-primary);
+    margin-bottom: 0.75rem;
+}
+
+.promo-matrix-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+}
+
+.promo-matrix-table th {
+    padding: 0.5rem 0.6rem;
+    text-align: center;
+    font-weight: 600;
+    font-size: 0.78rem;
+    color: var(--text-secondary);
+    border-bottom: 2px solid var(--border-color);
+    white-space: nowrap;
+}
+
+.promo-matrix-table th:first-child {
+    text-align: left;
+    width: 50px;
+}
+
+.promo-matrix-table td {
+    padding: 0.45rem 0.6rem;
+    text-align: center;
+    border-bottom: 1px solid var(--border-color);
+    font-size: 0.82rem;
+    white-space: nowrap;
+}
+
+.promo-matrix-table td:first-child {
+    text-align: left;
+}
+
+.promo-matrix-table td .week-count {
+    font-size: 0.72rem;
+    color: var(--text-muted);
+    display: block;
+}
+
+.promo-matrix-table td .r-squared {
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    display: block;
+}
+
+.promo-matrix-table td.no-data {
+    color: var(--text-muted);
+    font-style: italic;
+}
+
+/* Uplift coloring */
+.promo-matrix-table td.uplift-positive {
+    color: #4caf50;
+    font-weight: 600;
+}
+
+.promo-matrix-table td.uplift-negative {
+    color: #f44336;
+    font-weight: 600;
+}
+
+.promo-matrix-table td.uplift-neutral {
+    color: var(--text-secondary);
+}
+
+/* Regression coefficient strength */
+.promo-matrix-table td.coeff-strong {
+    background: rgba(76, 175, 80, 0.15);
+    color: #4caf50;
+    font-weight: 600;
+}
+
+.promo-matrix-table td.coeff-moderate {
+    background: rgba(255, 193, 7, 0.1);
+    color: #ffc107;
+}
+
+.promo-matrix-table td.coeff-weak {
+    color: var(--text-muted);
+}
+
 .promo-info-card {
     background: var(--bg-glass);
     border: 1px solid var(--border-color);

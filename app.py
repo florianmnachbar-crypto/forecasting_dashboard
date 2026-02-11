@@ -17,7 +17,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "2.4.0"
+APP_VERSION = "2.5.0"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -181,7 +181,11 @@ def get_promo_scores():
 
 @app.route('/api/promo-analysis', methods=['GET'])
 def get_promo_analysis():
-    """Get promo uplift analysis for all metrics and marketplaces"""
+    """Get promo uplift analysis for all metrics and marketplaces.
+    
+    Returns regressor-based analysis if 4-regressor format is loaded,
+    otherwise falls back to legacy band-based analysis.
+    """
     global data_processor
     
     if data_processor is None:
@@ -195,12 +199,23 @@ def get_promo_analysis():
                 'analysis': None
             })
         
-        analysis = data_processor.get_all_promo_analysis()
-        return jsonify({
-            'success': True,
-            'has_promo_scores': True,
-            'analysis': analysis
-        })
+        # Use regressor-based analysis if available
+        if data_processor.promo_format == 'regressors':
+            analysis = data_processor.get_all_regressor_analysis()
+            return jsonify({
+                'success': True,
+                'has_promo_scores': True,
+                'promo_format': 'regressors',
+                'analysis': analysis
+            })
+        else:
+            analysis = data_processor.get_all_promo_analysis()
+            return jsonify({
+                'success': True,
+                'has_promo_scores': True,
+                'promo_format': 'legacy',
+                'analysis': analysis
+            })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500
 
