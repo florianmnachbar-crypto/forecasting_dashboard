@@ -268,9 +268,22 @@ def build_html(data, base_forecasts, promo_forecasts, statistics, accuracy,
     <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
     <style>
 {css}
+/* Light mode toggle fix - ensure sliders are visible */
+[data-theme="light"] .toggle-slider {{
+    background-color: #ccc !important;
+    border: 1px solid #999 !important;
+}}
+[data-theme="light"] .toggle-switch input:checked + .toggle-slider {{
+    background-color: #ff9900 !important;
+    border-color: #ff9900 !important;
+}}
+[data-theme="light"] .toggle-slider:before {{
+    background-color: #fff !important;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.3) !important;
+}}
     </style>
 </head>
-<body>
+<body data-theme-default="light">
     <div class="bg-animation"></div>
 
     <header class="header">
@@ -319,14 +332,14 @@ def build_html(data, base_forecasts, promo_forecasts, statistics, accuracy,
                 <div class="toggle-group" id="promoOverlayToggleGroup" style="display: {'block' if has_promo_scores else 'none'};">
                     <span class="toggle-label">Promo Overlay</span>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="promoOverlayToggle" checked>
+                        <input type="checkbox" id="promoOverlayToggle">
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
                 <div class="toggle-group" id="promoUpliftToggleGroup" style="display: {'block' if has_promo_scores else 'none'};">
                     <span class="toggle-label">Promo Uplift FC</span>
                     <label class="toggle-switch">
-                        <input type="checkbox" id="promoUpliftToggle">
+                        <input type="checkbox" id="promoUpliftToggle" checked>
                         <span class="toggle-slider"></span>
                     </label>
                 </div>
@@ -525,8 +538,8 @@ def build_html(data, base_forecasts, promo_forecasts, statistics, accuracy,
         let currentMetric = 'Net Ordered Units';
         let currentStatsView = 'total';
         let showManualForecast = true;
-        let showPromoOverlay = true;
-        let showPromoUplift = false;
+        let showPromoOverlay = false;
+        let showPromoUplift = true;
         let selectedMarketplaces = ['EU5','UK','DE','FR','IT','ES'];
 
         // === HELPERS ===
@@ -577,11 +590,20 @@ def build_html(data, base_forecasts, promo_forecasts, statistics, accuracy,
         function getMpName(c) {{ return {{'UK':'United Kingdom','DE':'Germany','FR':'France','IT':'Italy','ES':'Spain','EU5':'EU5 Consolidated'}}[c]||c; }}
 
         // === THEME ===
+        // Set light mode as default
+        (function(){{
+            document.documentElement.setAttribute('data-theme','light');
+            const di=document.getElementById('darkIcon');
+            const li=document.getElementById('lightIcon');
+            if(di) di.classList.remove('active');
+            if(li) li.classList.add('active');
+        }})();
         document.getElementById('themeToggle').addEventListener('click',function(){{
             const h=document.documentElement, c=h.getAttribute('data-theme');
-            h.setAttribute('data-theme',c==='light'?'':'light');
-            document.getElementById('darkIcon').classList.toggle('active');
-            document.getElementById('lightIcon').classList.toggle('active');
+            const isLight=c==='light';
+            h.setAttribute('data-theme',isLight?'dark':'light');
+            document.getElementById('darkIcon').classList.toggle('active',isLight);
+            document.getElementById('lightIcon').classList.toggle('active',!isLight);
             updateCharts(); resizeAllCharts();
         }});
 
@@ -974,13 +996,32 @@ def build_html(data, base_forecasts, promo_forecasts, statistics, accuracy,
             grid.innerHTML=h;
         }}
         function buildDiscountCrosstab(sm,ctA,mps,vis,vc){{
-            let h='<div class="promo-matrix-card" style="min-width:100%;"><h4 class="promo-matrix-title">Discount % — '+sm+'</h4>';
+            const selDisc=document.getElementById('discountSubFilter')?.value||'all';
+            let h='<div class="promo-matrix-card" style="min-width:100%;"><h4 class="promo-matrix-title">Discount % — '+sm;
+            if(discountValues&&discountValues.length>0){{
+                h+=' <select id="discountSubFilter" class="discount-sub-filter" onchange="populatePromoAnalysis()">';
+                h+='<option value="all"'+(selDisc==='all'?' selected':'')+'>All Discounts</option>';
+                for(const dv of discountValues){{
+                    const lbl=Math.round(dv)+'%';
+                    h+='<option value="'+dv+'"'+(selDisc==dv?' selected':'')+'>'+lbl+'</option>';
+                }}
+                h+='</select>';
+            }}
+            h+='</h4>';
             h+='<table class="promo-matrix-table"><thead><tr><th>MP</th>';
             for(const vi of vis) h+='<th><span style="color:'+vc[vi]+';">'+vi+'</span></th>';
             h+='</tr></thead><tbody>';
             for(const mp of mps){{
                 if(!ctA[mp]) continue;
-                const ct=ctA[mp].crosstab||{{}};const ptD=ct['Discount %']||{{}};
+                let ptD;
+                if(selDisc!=='all'){{
+                    const discLabel=Math.round(parseFloat(selDisc))+'%';
+                    const discCt=ctA[mp].discount_crosstab||{{}};
+                    ptD=discCt[discLabel]||{{}};
+                }}else{{
+                    const ct=ctA[mp].crosstab||{{}};
+                    ptD=ct['Discount %']||{{}};
+                }}
                 h+='<tr><td><span class="mp-flag '+mp.toLowerCase()+'">'+mp+'</span></td>';
                 for(const vi of vis){{
                     const cell=ptD[vi];
