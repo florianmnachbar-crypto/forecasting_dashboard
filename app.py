@@ -882,10 +882,16 @@ def get_latest_week():
                 'error': 'Could not calculate latest week overview'
             }), 400
         
+        # Include promo assessment if available
+        promo_assessment = None
+        if data_processor.has_promo_scores and data_processor.promo_format == 'regressors':
+            promo_assessment = data_processor.get_latest_week_promo_assessment()
+        
         return jsonify({
             'success': True,
             'overview': overview,
-            'has_manual_forecast': data_processor.has_manual_forecast
+            'has_manual_forecast': data_processor.has_manual_forecast,
+            'promo_assessment': promo_assessment
         })
     except Exception as e:
         return jsonify({'success': False, 'error': str(e)}), 500

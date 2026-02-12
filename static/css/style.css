@@ -1550,6 +1550,82 @@ input:checked + .toggle-slider::before {
     color: #f44336;
 }
 
+/* Promo Assessment Cards (Latest Week tab) */
+.promo-assessment-container {
+    margin-bottom: 1.5rem;
+}
+.promo-assessment-header h3 {
+    font-size: 1.1rem;
+    margin: 0 0 0.25rem 0;
+    color: var(--text-primary);
+}
+.promo-assessment-subtitle {
+    font-size: 0.82rem;
+    color: var(--text-muted);
+    margin: 0 0 1rem 0;
+}
+.promo-assessment-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 0.75rem;
+}
+.promo-assess-card {
+    background: var(--bg-card);
+    border: 1px solid var(--border-color);
+    border-radius: 10px;
+    padding: 0.85rem 1rem;
+    transition: box-shadow 0.2s;
+}
+.promo-assess-card.assess-outperformed { border-left: 3px solid #00e676; }
+.promo-assess-card.assess-met { border-left: 3px solid #ffc107; }
+.promo-assess-card.assess-underperformed { border-left: 3px solid #f44336; }
+.promo-assess-card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.5rem;
+}
+.assess-verdict {
+    font-size: 0.82rem;
+    font-weight: 600;
+}
+.promo-assess-expected,
+.promo-assess-actual {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.88rem;
+    margin-bottom: 0.25rem;
+}
+.assess-label {
+    color: var(--text-muted);
+    min-width: 65px;
+}
+.assess-level {
+    font-size: 0.9rem;
+}
+.assess-uplift {
+    font-size: 0.75rem;
+    color: var(--text-muted);
+    margin-left: auto;
+}
+.promo-assess-metrics {
+    margin-top: 0.5rem;
+    border-top: 1px solid var(--border-color);
+    padding-top: 0.4rem;
+}
+.promo-assess-metric-row {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    padding: 0.15rem 0;
+}
+.promo-assess-metric-row .metric-name {
+    color: var(--text-muted);
+    min-width: 55px;
+}
+
 /* Promo Analysis Styles */
 .promo-legend {
     margin-bottom: 1.5rem;

@@ -1802,6 +1802,130 @@ class DataProcessor:
             'method': 'band_based'
         }
     
+    def get_latest_week_promo_assessment(self):
+        """Assess promo performance for the latest week: expected vs actual level.
+        
+        For each MP and metric, compares:
+        - Expected: volume_impact from WW Marketing promo regressors
+        - Actual: which band the actual value falls into based on historical uplift thresholds
+        
+        Returns dict keyed by MP, then metric, with:
+        - expected_level: str (e.g. 'HIGH')
+        - expected_vi: int (0-3)
+        - actual_value: float
+        - baseline_avg: float
+        - actual_uplift_factor: float
+        - actual_reflected_level: str
+        - actual_reflected_vi: int
+        - assessment: 'outperformed' | 'met' | 'underperformed'
+        """
+        if not self.has_promo_scores or not self.data:
+            return None
+        
+        vi_labels = {0: 'No Promo', 1: 'MEDIUM', 2: 'HIGH', 3: 'MEGA'}
+        
+        # Find the latest week with actuals
+        latest_date = None
+        latest_week = None
+        for metric in self.METRICS:
+            if metric not in self.data:
+                continue
+            for mp in self.MARKETPLACES:
+                df = self.get_dataframe(metric, mp, is_forecast=False)
+                if df is not None and not df.empty:
+                    last_date = df['ds'].max()
+                    if latest_date is None or last_date > latest_date:
+                        latest_date = last_date
+                        latest_week = self.format_week_label(last_date)
+        
+        if latest_date is None or latest_week is None:
+            return None
+        
+        result = {'latest_week': latest_week, 'assessments': {}}
+        
+        for mp in self.MARKETPLACES:
+            result['assessments'][mp] = {}
+            
+            # Get the expected volume_impact for this MP and week
+            regs = self.get_promo_regressors_for_week(mp, latest_week)
+            expected_vi = int(regs.get('volume_impact', 0)) if regs else 0
+            expected_label = vi_labels.get(expected_vi, 'No Promo')
+            
+            for metric in self.METRICS:
+                # Get actual value for the latest week
+                df = self.get_dataframe(metric, mp, is_forecast=False)
+                if df is None or df.empty:
+                    continue
+                
+                latest_row = df[df['ds'] == latest_date]
+                if latest_row.empty:
+                    continue
+                actual_value = float(latest_row['y'].iloc[0])
+                
+                # Get uplift analysis to determine band thresholds
+                analysis = self.calculate_regressor_uplift_analysis(metric)
+                if not analysis or mp not in analysis:
+                    continue
+                
+                mp_analysis = analysis[mp]
+                uplift_by_impact = mp_analysis.get('uplift_by_impact', {})
+                baseline_avg = mp_analysis.get('baseline_avg')
+                
+                if baseline_avg is None or baseline_avg == 0:
+                    continue
+                
+                actual_uplift = actual_value / baseline_avg
+                
+                # Determine which band the actual uplift factor most closely matches
+                # Build thresholds from historical averages
+                band_uplifts = {}
+                for vi_val, vi_label in vi_labels.items():
+                    band_data = uplift_by_impact.get(vi_label)
+                    if band_data and 'uplift_factor' in band_data:
+                        band_uplifts[vi_val] = band_data['uplift_factor']
+                    elif vi_label == 'No Promo' and band_data:
+                        band_uplifts[vi_val] = 1.0
+                
+                # Find the band whose uplift factor is closest to actual
+                # Use midpoints between consecutive bands as boundaries
+                actual_vi = 0
+                sorted_bands = sorted(band_uplifts.items())
+                
+                if len(sorted_bands) >= 2:
+                    for i in range(len(sorted_bands) - 1):
+                        curr_vi, curr_up = sorted_bands[i]
+                        next_vi, next_up = sorted_bands[i + 1]
+                        midpoint = (curr_up + next_up) / 2
+                        if actual_uplift >= midpoint:
+                            actual_vi = next_vi
+                        else:
+                            break
+                elif len(sorted_bands) == 1:
+                    actual_vi = sorted_bands[0][0]
+                
+                actual_reflected_label = vi_labels.get(actual_vi, 'No Promo')
+                
+                # Assessment
+                if actual_vi > expected_vi:
+                    assessment = 'outperformed'
+                elif actual_vi == expected_vi:
+                    assessment = 'met'
+                else:
+                    assessment = 'underperformed'
+                
+                result['assessments'][mp][metric] = {
+                    'expected_level': expected_label,
+                    'expected_vi': expected_vi,
+                    'actual_value': round(actual_value, 2),
+                    'baseline_avg': round(baseline_avg, 2),
+                    'actual_uplift_factor': round(actual_uplift, 2),
+                    'actual_reflected_level': actual_reflected_label,
+                    'actual_reflected_vi': actual_vi,
+                    'assessment': assessment,
+                }
+        
+        return result
+    
     def get_all_forecast_with_uplift(self):
         """Get uplifted forecast data for all metrics and marketplaces"""
         if not self.has_manual_forecast or not self.has_promo_scores:

@@ -238,6 +238,10 @@ async function loadLatestWeekOverview() {
         
         if (result.success) {
             renderLatestWeekTable(result.overview, result.has_manual_forecast);
+            // Render promo assessment cards if available
+            if (result.promo_assessment) {
+                renderPromoAssessment(result.promo_assessment);
+            }
         } else {
             console.error('Failed to load latest week overview:', result.error);
         }
@@ -1202,6 +1206,96 @@ function renderChart(marketplace, metric, isModal = false) {
     };
     
     Plotly.newPlot(container, traces, layout, config);
+}
+
+// Render promo assessment cards in the Latest Week tab
+function renderPromoAssessment(assessment) {
+    const container = document.getElementById('promoAssessmentContainer');
+    if (!container || !assessment || !assessment.assessments) {
+        if (container) container.style.display = 'none';
+        return;
+    }
+
+    const viColors = {
+        'No Promo': '#6c757d',
+        'MEDIUM': '#ffc107',
+        'HIGH': '#ff9800',
+        'MEGA': '#f44336'
+    };
+    const assessIcons = {
+        'outperformed': '<i class="fas fa-arrow-up" style="color:#00e676;"></i>',
+        'met': '<i class="fas fa-check" style="color:#ffc107;"></i>',
+        'underperformed': '<i class="fas fa-arrow-down" style="color:#f44336;"></i>'
+    };
+    const assessLabels = {
+        'outperformed': 'Outperformed',
+        'met': 'Met expectations',
+        'underperformed': 'Underperformed'
+    };
+
+    const mpOrder = ['EU5', 'UK', 'DE', 'FR', 'IT', 'ES'];
+    const primaryMetric = 'Net Ordered Units';
+
+    let html = `<div class="promo-assessment-header">
+        <h3><i class="fas fa-bullseye"></i> Promo Performance Assessment — ${assessment.latest_week}</h3>
+        <p class="promo-assessment-subtitle">Expected vs actual performance based on WW Marketing promo inputs</p>
+    </div>`;
+    html += '<div class="promo-assessment-grid">';
+
+    for (const mp of mpOrder) {
+        const mpAssess = assessment.assessments[mp];
+        if (!mpAssess) continue;
+
+        // Show primary metric card with all metrics inside
+        const primary = mpAssess[primaryMetric];
+        if (!primary) continue;
+
+        const expectedColor = viColors[primary.expected_level] || '#6c757d';
+        const actualColor = viColors[primary.actual_reflected_level] || '#6c757d';
+        const icon = assessIcons[primary.assessment] || '';
+        const label = assessLabels[primary.assessment] || '';
+        const assessClass = `assess-${primary.assessment}`;
+
+        html += `<div class="promo-assess-card ${assessClass}">
+            <div class="promo-assess-card-header">
+                <span class="mp-flag ${mp.toLowerCase()}">${mp}</span>
+                <span class="assess-verdict">${icon} ${label}</span>
+            </div>
+            <div class="promo-assess-expected">
+                <span class="assess-label">Expected:</span>
+                <span class="assess-level" style="color:${expectedColor};font-weight:600;">${primary.expected_level}</span>
+            </div>
+            <div class="promo-assess-actual">
+                <span class="assess-label">Actual:</span>
+                <span class="assess-level" style="color:${actualColor};font-weight:600;">${primary.actual_reflected_level}</span>
+                <span class="assess-uplift">${primary.actual_uplift_factor}x vs baseline</span>
+            </div>
+            <div class="promo-assess-metrics">`;
+
+        // Add mini rows for other metrics
+        const otherMetrics = ['Transits', 'Transit Conversion', 'UPO'];
+        for (const m of otherMetrics) {
+            const mData = mpAssess[m];
+            if (!mData) continue;
+            const mExpColor = viColors[mData.expected_level] || '#6c757d';
+            const mActColor = viColors[mData.actual_reflected_level] || '#6c757d';
+            const mIcon = assessIcons[mData.assessment] || '';
+
+            html += `<div class="promo-assess-metric-row">
+                <span class="metric-name">${m === 'Transit Conversion' ? 'CVR' : m}</span>
+                <span style="color:${mExpColor};">${mData.expected_level}</span>
+                <span>→</span>
+                <span style="color:${mActColor};">${mData.actual_reflected_level}</span>
+                <span>${mIcon}</span>
+            </div>`;
+        }
+
+        html += '</div></div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+    container.style.display = 'block';
 }
 
 // Populate promo analysis grid - handles both regressor and legacy formats
