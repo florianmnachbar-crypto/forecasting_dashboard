@@ -1917,10 +1917,11 @@ function renderHistoricDeviationsTable(deviations, summary, metric, hasModelBack
             const winnerLabel = manualBetter ? 'Manual FC' : 'Model FC (Backtest)';
             const winnerWmape = manualBetter ? summary.manual_wmape : summary.model_wmape;
             const winnerAccuracy = manualBetter ? summary.manual_accuracy : summary.model_accuracy;
+            const tf = summary.timeframe || 'T6W';
             summaryHtml += `
                 <div class="accuracy-comparison-banner">
                     <span class="comparison-icon">🏆</span>
-                    <span><strong>${winnerLabel}</strong> is more accurate — WMAPE: <strong>${winnerWmape}%</strong>, Accuracy: <strong>${winnerAccuracy}%</strong></span>
+                    <span><strong>${winnerLabel}</strong> is more accurate (${tf}) — WMAPE: <strong>${winnerWmape}%</strong>, Accuracy: <strong>${winnerAccuracy}%</strong></span>
                 </div>
             `;
         }
@@ -1944,15 +1945,15 @@ function renderHistoricDeviationsTable(deviations, summary, metric, hasModelBack
                 </div>
                 <div class="summary-card ${getDeviationSummaryClass(summary.manual_wmape)}">
                     <div class="summary-value">${manualWmapeDisplay}</div>
-                    <div class="summary-label">Manual WMAPE</div>
+                    <div class="summary-label">Manual WMAPE (T6W)</div>
                 </div>
                 <div class="summary-card ${getDeviationSummaryClass(summary.manual_wmape)}">
                     <div class="summary-value">${manualAccDisplay}</div>
-                    <div class="summary-label">Manual Accuracy</div>
+                    <div class="summary-label">Manual Accuracy (T6W)</div>
                 </div>
                 <div class="summary-card">
                     <div class="summary-value">${summary.manual_avg_dev !== null ? (summary.manual_avg_dev > 0 ? '+' : '') + summary.manual_avg_dev.toFixed(1) + '%' : '--'}</div>
-                    <div class="summary-label">Manual Avg Bias</div>
+                    <div class="summary-label">Manual Avg Bias (T6W)</div>
                 </div>
             `;
         }
@@ -1967,15 +1968,15 @@ function renderHistoricDeviationsTable(deviations, summary, metric, hasModelBack
                 </div>
                 <div class="summary-card ${getDeviationSummaryClass(summary.model_wmape)}">
                     <div class="summary-value">${modelWmapeDisplay}</div>
-                    <div class="summary-label">Model WMAPE</div>
+                    <div class="summary-label">Model WMAPE (T6W)</div>
                 </div>
                 <div class="summary-card ${getDeviationSummaryClass(summary.model_wmape)}">
                     <div class="summary-value">${modelAccDisplay}</div>
-                    <div class="summary-label">Model Accuracy</div>
+                    <div class="summary-label">Model Accuracy (T6W)</div>
                 </div>
                 <div class="summary-card">
                     <div class="summary-value">${summary.model_avg_dev !== null ? (summary.model_avg_dev > 0 ? '+' : '') + summary.model_avg_dev.toFixed(1) + '%' : '--'}</div>
-                    <div class="summary-label">Model Avg Bias</div>
+                    <div class="summary-label">Model Avg Bias (T6W)</div>
                 </div>
             `;
         }

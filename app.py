@@ -1000,40 +1000,54 @@ def get_historic_deviations():
             
             deviations.append(record)
         
-        # Calculate summary stats
+        # Calculate summary stats using trailing 6 weeks (T6W) for accuracy comparison
+        # Sort deviations by date descending, take most recent 6 with data
+        sorted_devs = sorted(deviations, key=lambda d: d['date'], reverse=True)
+        
+        # T6W for manual FC: most recent 6 weeks where manual forecast exists
+        t6w_manual = [d for d in sorted_devs if d['manual_dev_pct'] is not None][:6]
+        # T6W for model FC: most recent 6 weeks where model forecast exists
+        t6w_model = [d for d in sorted_devs if d['model_dev_pct'] is not None][:6]
+        
+        # All-time counts for display
         manual_devs = [d['manual_dev_pct'] for d in deviations if d['manual_dev_pct'] is not None]
         model_devs = [d['model_dev_pct'] for d in deviations if d['model_dev_pct'] is not None]
         
-        # Calculate WMAPE for manual FC
+        # Calculate WMAPE for manual FC (T6W)
         manual_wmape = None
-        if manual_devs:
-            manual_abs_errors = [abs(d['actual'] - d['manual_forecast']) for d in deviations if d['manual_forecast'] is not None]
-            manual_actuals = [d['actual'] for d in deviations if d['manual_forecast'] is not None]
+        if t6w_manual:
+            manual_abs_errors = [abs(d['actual'] - d['manual_forecast']) for d in t6w_manual]
+            manual_actuals = [d['actual'] for d in t6w_manual]
             total_manual_actual = sum(manual_actuals)
             if total_manual_actual > 0:
                 manual_wmape = round(sum(manual_abs_errors) / total_manual_actual * 100, 1)
         
-        # Calculate WMAPE for model FC
+        # Calculate WMAPE for model FC (T6W)
         model_wmape = None
-        if model_devs:
-            model_abs_errors = [abs(d['actual'] - d['model_forecast']) for d in deviations if d['model_forecast'] is not None]
-            model_actuals = [d['actual'] for d in deviations if d['model_forecast'] is not None]
+        if t6w_model:
+            model_abs_errors = [abs(d['actual'] - d['model_forecast']) for d in t6w_model]
+            model_actuals = [d['actual'] for d in t6w_model]
             total_model_actual = sum(model_actuals)
             if total_model_actual > 0:
                 model_wmape = round(sum(model_abs_errors) / total_model_actual * 100, 1)
         
+        # T6W bias
+        manual_t6w_devs = [d['manual_dev_pct'] for d in t6w_manual]
+        model_t6w_devs = [d['model_dev_pct'] for d in t6w_model]
+        
         summary = {
             'total_weeks': len(deviations),
-            'manual_forecast_weeks': len(manual_devs),
-            'manual_avg_dev': round(sum(manual_devs) / len(manual_devs), 1) if manual_devs else None,
-            'manual_avg_abs_dev': round(sum(abs(d) for d in manual_devs) / len(manual_devs), 1) if manual_devs else None,
+            'manual_forecast_weeks': len(t6w_manual),
+            'manual_avg_dev': round(sum(manual_t6w_devs) / len(manual_t6w_devs), 1) if manual_t6w_devs else None,
+            'manual_avg_abs_dev': round(sum(abs(d) for d in manual_t6w_devs) / len(manual_t6w_devs), 1) if manual_t6w_devs else None,
             'manual_wmape': manual_wmape,
             'manual_accuracy': round(100 - manual_wmape, 1) if manual_wmape is not None else None,
-            'model_forecast_weeks': len(model_devs),
-            'model_avg_dev': round(sum(model_devs) / len(model_devs), 1) if model_devs else None,
-            'model_avg_abs_dev': round(sum(abs(d) for d in model_devs) / len(model_devs), 1) if model_devs else None,
+            'model_forecast_weeks': len(t6w_model),
+            'model_avg_dev': round(sum(model_t6w_devs) / len(model_t6w_devs), 1) if model_t6w_devs else None,
+            'model_avg_abs_dev': round(sum(abs(d) for d in model_t6w_devs) / len(model_t6w_devs), 1) if model_t6w_devs else None,
             'model_wmape': model_wmape,
             'model_accuracy': round(100 - model_wmape, 1) if model_wmape is not None else None,
+            'timeframe': 'T6W',
         }
         
         return jsonify({
