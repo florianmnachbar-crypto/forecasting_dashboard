@@ -370,7 +370,7 @@ class Forecaster:
                     enforce_invertibility=False
                 )
                 
-                fitted = model.fit(disp=False, maxiter=100)
+                fitted = model.fit(disp=False, maxiter=200)
                 fc = fitted.get_forecast(steps=1, exog=step_exog)
                 predicted = max(0, float(fc.predicted_mean.values[0]))
                 

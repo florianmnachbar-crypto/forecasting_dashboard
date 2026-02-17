@@ -1956,8 +1956,12 @@ class DataProcessor:
         
         Uses SARIMAX rolling one-step-ahead backtest with promo scores as
         exogenous regressor (when available), matching the forward forecast
-        with promo uplift. This ensures the backtest reflects the same model
-        configuration used for future predictions.
+        with promo uplift. Applies the same post-processing as the forward
+        forecast:
+        
+        1. Promo floor: For promo weeks (score > 1), takes max(baseline, promo)
+        2. Caps: Transit Conversion ≤ 10%, Transits ≤ min(EU5 max, MP max × 3),
+                 UPO ≤ MP max × 2
         
         For Net Ordered Units: backtests each driver (Transits, CVR, UPO)
         independently and derives NOU = T × C × U.
@@ -2011,27 +2015,87 @@ class DataProcessor:
         # Build promo scores for exogenous regressor (matches forward forecast with promo uplift)
         exog_scores = self._build_promo_scores_for_backtest(df, marketplace)
         
-        backtest = forecaster.rolling_backtest(
+        # Run promo-adjusted backtest
+        backtest_promo = forecaster.rolling_backtest(
             df, use_seasonality=True, min_train_size=6, exog_scores=exog_scores
         )
-        if backtest is None:
+        
+        # Run baseline backtest (no promo) for floor comparison
+        backtest_baseline = None
+        if exog_scores is not None:
+            backtest_baseline = forecaster.rolling_backtest(
+                df, use_seasonality=True, min_train_size=6, exog_scores=None
+            )
+        
+        if backtest_promo is None:
             self._backtest_cache[cache_key] = None
             return None
         
-        # Apply caps for specific metrics
+        # Build baseline lookup by date for floor logic
+        baseline_by_date = {}
+        if backtest_baseline:
+            for entry in backtest_baseline:
+                baseline_by_date[entry['date'].strftime('%Y-%m-%d')] = entry['predicted']
+        
+        # Calculate caps for this metric/marketplace (same as forward forecast)
+        transits_cap = None
+        upo_cap = None
+        if metric == 'Transits':
+            mp_max = self._get_metric_historical_max(metric, marketplace)
+            eu5_max = self._get_metric_historical_max(metric, 'EU5')
+            caps = []
+            if eu5_max is not None:
+                caps.append(eu5_max)
+            if mp_max is not None:
+                caps.append(mp_max * 3.0)
+            transits_cap = min(caps) if caps else None
+        elif metric == 'UPO':
+            mp_max = self._get_metric_historical_max(metric, marketplace)
+            if mp_max is not None:
+                upo_cap = mp_max * 2.0
+        
+        # Apply promo floor logic and caps
         result = {}
-        for entry in backtest:
+        for entry in backtest_promo:
             date_str = entry['date'].strftime('%Y-%m-%d')
-            predicted = entry['predicted']
+            promo_val = entry['predicted']
             
-            # Cap Transit Conversion at 10%
+            # Get the promo score for this week to decide floor logic
+            week_label = self.format_week_label(entry['date'])
+            score = self.get_promo_score_for_week(marketplace, week_label) if exog_scores else None
+            
+            # Promo floor: if score > 1 (promo week), take max(baseline, promo)
+            if score is not None and score > 1.0 and date_str in baseline_by_date:
+                baseline_val = baseline_by_date[date_str]
+                predicted = max(promo_val, baseline_val)
+            elif score is not None and score == 1.0 and date_str in baseline_by_date:
+                # No promo week: use baseline
+                predicted = baseline_by_date[date_str]
+            else:
+                predicted = promo_val
+            
+            # Apply caps (matching forward forecast)
             if metric == 'Transit Conversion':
                 predicted = min(predicted, 0.10)
+            elif metric == 'Transits' and transits_cap is not None:
+                predicted = min(predicted, transits_cap)
+            elif metric == 'UPO' and upo_cap is not None:
+                predicted = min(predicted, upo_cap)
             
             result[date_str] = predicted
         
         self._backtest_cache[cache_key] = result if result else None
         return self._backtest_cache[cache_key]
+    
+    def _get_metric_historical_max(self, metric, marketplace):
+        """Get historical maximum value for a metric and marketplace."""
+        try:
+            df = self.get_dataframe(metric, marketplace)
+            if df is not None and not df.empty:
+                return float(df['y'].max())
+        except Exception:
+            pass
+        return None
     
     def get_all_forecast_with_uplift(self):
         """Get uplifted forecast data for all metrics and marketplaces"""
