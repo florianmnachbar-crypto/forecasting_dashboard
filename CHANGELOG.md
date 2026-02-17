@@ -5,17 +5,26 @@ All notable changes to the Amazon Haul EU5 Forecasting Dashboard will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-02-17
+
+### Fixed
+- **Local-first file paths**: Switched inputs_forecasting.xlsx and WW Marketing from SharePoint/OneDrive to local paths (SharePoint WebDAV and OneDrive personal paths not accessible from scripts)
+- Processor now writes actuals + promo regressors to `../forecasting_dashboard/data/inputs_forecasting.xlsx`
+- Processor reads WW Marketing from `../forecasting_dashboard/data/WW Haul Marketing.xlsx` (download manually)
+- Dashboard auto-loads from `data/inputs_forecasting.xlsx` directly (no SharePoint attempt)
+- SharePoint reporting file update (`Forecasting_Reporting_dashboard_update 2026.xlsx`) unchanged — still works
+
 ## [2.7.0] - 2026-02-17
 
 ### Added
-- **SharePoint Auto-Load**: Dashboard now auto-loads `inputs_forecasting.xlsx` from SharePoint on startup (falls back to local `data/` copy if offline)
-- **QuickSight Processor → inputs_forecasting.xlsx**: Processor now writes actuals directly to the SharePoint inputs file (Actuals sheet) alongside the reporting file
-- **QuickSight Processor → Promo Regressors**: Processor now reads WW Haul Marketing file and updates Promo Regressors sheet in inputs_forecasting.xlsx automatically
+- **Unified Pipeline**: QuickSight Processor now updates inputs_forecasting.xlsx (Actuals + Promo Regressors) alongside the reporting file
+- **Auto-Load**: Dashboard auto-loads `data/inputs_forecasting.xlsx` on startup
+- **QuickSight Processor → Promo Regressors**: Reads local WW Haul Marketing file and updates Promo Regressors sheet automatically
 
 ### Changed
 - App version bumped to 2.7.0
-- `process_quicksight_exports.py`: Added `update_inputs_file()` and `update_inputs_promo_regressors()` functions, both called at end of `process_exports()`
-- `app.py`: Added `auto_load_data()` function and SharePoint/local file path constants
+- `process_quicksight_exports.py`: Added `update_inputs_file()` and `update_inputs_promo_regressors()` functions
+- `app.py`: Added `auto_load_data()` function
 - One-click weekly workflow: Run QuickSight Processor → all files updated → start dashboard (auto-loads latest data)
 
 ---
