@@ -60,6 +60,7 @@ class DataProcessor:
         self.has_manual_forecast = False
         self.has_promo_scores = False
         self.promo_format = None  # 'regressors' or 'legacy'
+        self._backtest_cache = {}  # Cache for rolling backtest results
         
     def parse_week_column(self, col_name):
         """Convert week column name to datetime"""
@@ -1925,6 +1926,112 @@ class DataProcessor:
                 }
         
         return result
+    
+    def _build_promo_scores_for_backtest(self, df, marketplace):
+        """Build a list of promo scores aligned with the actuals DataFrame rows.
+        
+        Used to pass promo scores as exogenous regressor to the rolling backtest,
+        matching the forward forecast behavior when Promo Uplift FC is ON.
+        
+        Returns list of scores (same length as df), or None if no promo data.
+        """
+        if not self.has_promo_scores:
+            return None
+        
+        scores = []
+        for _, row in df.iterrows():
+            week_label = self.format_week_label(row['ds'])
+            score = self.get_promo_score_for_week(marketplace, week_label)
+            scores.append(score if score is not None else 1.0)  # 1.0 = baseline (no promo)
+        
+        # Only return if we have at least some non-baseline scores
+        non_baseline = sum(1 for s in scores if s != 1.0)
+        if non_baseline == 0:
+            return None
+        
+        return scores
+    
+    def generate_historic_model_forecasts(self, metric, marketplace):
+        """Generate rolling backtest model forecasts for historic weeks.
+        
+        Uses SARIMAX rolling one-step-ahead backtest with promo scores as
+        exogenous regressor (when available), matching the forward forecast
+        with promo uplift. This ensures the backtest reflects the same model
+        configuration used for future predictions.
+        
+        For Net Ordered Units: backtests each driver (Transits, CVR, UPO)
+        independently and derives NOU = T × C × U.
+        
+        Results are cached per metric/marketplace (cleared on new file upload).
+        
+        Returns:
+        - dict mapping date_str -> predicted_value, or None
+        """
+        from forecaster import Forecaster
+        
+        cache_key = f"{metric}|{marketplace}"
+        if cache_key in self._backtest_cache:
+            return self._backtest_cache[cache_key]
+        
+        forecaster = Forecaster()
+        
+        if metric == 'Net Ordered Units':
+            # Derive from driver backtests: NOU = Transits × CVR × UPO
+            driver_results = {}
+            for driver in ['Transits', 'Transit Conversion', 'UPO']:
+                dr = self.generate_historic_model_forecasts(driver, marketplace)
+                if dr is not None:
+                    driver_results[driver] = dr
+            
+            if len(driver_results) == 3:
+                # Find dates common to all three drivers
+                common_dates = set(driver_results['Transits'].keys())
+                for driver in ['Transit Conversion', 'UPO']:
+                    common_dates &= set(driver_results[driver].keys())
+                
+                result = {}
+                for date_str in common_dates:
+                    t = driver_results['Transits'][date_str]
+                    c = driver_results['Transit Conversion'][date_str]
+                    u = driver_results['UPO'][date_str]
+                    result[date_str] = max(0, t * c * u)
+                
+                self._backtest_cache[cache_key] = result if result else None
+                return self._backtest_cache[cache_key]
+            else:
+                # Fall back to direct backtest of NOU
+                pass
+        
+        # Direct backtest for this metric
+        df = self.get_dataframe(metric, marketplace, is_forecast=False)
+        if df is None or df.empty or len(df) < 7:
+            self._backtest_cache[cache_key] = None
+            return None
+        
+        # Build promo scores for exogenous regressor (matches forward forecast with promo uplift)
+        exog_scores = self._build_promo_scores_for_backtest(df, marketplace)
+        
+        backtest = forecaster.rolling_backtest(
+            df, use_seasonality=True, min_train_size=6, exog_scores=exog_scores
+        )
+        if backtest is None:
+            self._backtest_cache[cache_key] = None
+            return None
+        
+        # Apply caps for specific metrics
+        result = {}
+        for entry in backtest:
+            date_str = entry['date'].strftime('%Y-%m-%d')
+            predicted = entry['predicted']
+            
+            # Cap Transit Conversion at 10%
+            if metric == 'Transit Conversion':
+                predicted = min(predicted, 0.10)
+            
+            result[date_str] = predicted
+        
+        self._backtest_cache[cache_key] = result if result else None
+        return self._backtest_cache[cache_key]
     
     def get_all_forecast_with_uplift(self):
         """Get uplifted forecast data for all metrics and marketplaces"""

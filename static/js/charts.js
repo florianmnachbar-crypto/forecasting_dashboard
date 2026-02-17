@@ -1,5 +1,5 @@
 /**
- * Amazon Haul EU5 Forecasting Dashboard - Charts v2.5.0
+ * Amazon Haul EU5 Forecasting Dashboard - Charts v2.6.0
  * Handles data visualization, theme switching, and user interactions
  */
 
@@ -1827,18 +1827,28 @@ function showToast(type, title, message) {
 async function loadHistoricDeviations() {
     const metricSelect = document.getElementById('deviationMetricSelect');
     const mpSelect = document.getElementById('deviationMpSelect');
-    
+
     if (!metricSelect || !mpSelect) return;
-    
+
     const metric = metricSelect.value;
     const marketplace = mpSelect.value;
-    
+
+    // Show loading indicator (backtest can take a few seconds)
+    const tableBody = document.getElementById('historicDeviationsTableBody');
+    const summaryContainer = document.getElementById('deviationSummary');
+    if (tableBody) {
+        tableBody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 2rem;"><div class="backtest-loading"><div class="spinner"></div><div style="margin-top: 0.5rem;">Running model backtest&hellip; This may take a few seconds.</div></div></td></tr>';
+    }
+    if (summaryContainer) {
+        summaryContainer.innerHTML = '';
+    }
+
     try {
-        const response = await fetch(`/api/historic-deviations?metric=${encodeURIComponent(metric)}&marketplace=${encodeURIComponent(marketplace)}`);
+        const response = await fetch(`/api/historic-deviations?metric=${encodeURIComponent(metric)}&marketplace=${encodeURIComponent(marketplace)}&include_model=true`);
         const result = await response.json();
-        
+
         if (result.success) {
-            renderHistoricDeviationsTable(result.deviations, result.summary, metric);
+            renderHistoricDeviationsTable(result.deviations, result.summary, metric, result.has_model_backtest);
         } else {
             console.error('Failed to load historic deviations:', result.error);
             showToast('error', 'Error', result.error || 'Failed to load historic deviations');
@@ -1849,37 +1859,37 @@ async function loadHistoricDeviations() {
     }
 }
 
-function renderHistoricDeviationsTable(deviations, summary, metric) {
+function renderHistoricDeviationsTable(deviations, summary, metric, hasModelBacktest) {
     const tableBody = document.getElementById('historicDeviationsTableBody');
     const summaryContainer = document.getElementById('deviationSummary');
-    
+
     if (!tableBody) return;
-    
+
     // Sort deviations by date ascending for chart (oldest first)
     const sortedForChart = [...deviations].sort((a, b) => new Date(a.date) - new Date(b.date));
-    
+
     // Render the deviation chart
     renderDeviationChart(sortedForChart, metric);
-    
+
     // Sort deviations by date descending for table (most recent first)
     const sortedDeviations = [...deviations].sort((a, b) => new Date(b.date) - new Date(a.date));
-    
+
     let html = '';
-    
+
     sortedDeviations.forEach(d => {
         const actualDisplay = formatMetricValue(d.actual, metric);
         const manualFcDisplay = d.manual_forecast !== null ? formatMetricValue(d.manual_forecast, metric) : '--';
-        const manualDevDisplay = d.manual_dev_pct !== null 
-            ? `${d.manual_dev_pct > 0 ? '+' : ''}${d.manual_dev_pct.toFixed(1)}%` 
+        const manualDevDisplay = d.manual_dev_pct !== null
+            ? `${d.manual_dev_pct > 0 ? '+' : ''}${d.manual_dev_pct.toFixed(1)}%`
             : '--';
         const manualDevClass = getDeviationColorClass(d.manual_dev_pct);
-        
+
         const modelFcDisplay = d.model_forecast !== null ? formatMetricValue(d.model_forecast, metric) : '--';
-        const modelDevDisplay = d.model_dev_pct !== null 
-            ? `${d.model_dev_pct > 0 ? '+' : ''}${d.model_dev_pct.toFixed(1)}%` 
+        const modelDevDisplay = d.model_dev_pct !== null
+            ? `${d.model_dev_pct > 0 ? '+' : ''}${d.model_dev_pct.toFixed(1)}%`
             : '--';
         const modelDevClass = getDeviationColorClass(d.model_dev_pct);
-        
+
         html += `
             <tr>
                 <td class="week-cell">${d.week}</td>
@@ -1891,29 +1901,54 @@ function renderHistoricDeviationsTable(deviations, summary, metric) {
             </tr>
         `;
     });
-    
+
     tableBody.innerHTML = html || '<tr><td colspan="6" style="text-align: center; color: var(--text-muted);">No data available</td></tr>';
-    
-    // Render summary
+
+    // Render summary with accuracy comparison
     if (summaryContainer && summary) {
-        let summaryHtml = '<div class="deviation-summary-grid">';
-        
+        let summaryHtml = '';
+
+        // Accuracy comparison banner (if both are available)
+        const hasManual = summary.manual_forecast_weeks > 0;
+        const hasModel = summary.model_forecast_weeks > 0;
+
+        if (hasManual && hasModel && summary.manual_wmape !== null && summary.model_wmape !== null) {
+            const manualBetter = summary.manual_wmape <= summary.model_wmape;
+            const winnerLabel = manualBetter ? 'Manual FC' : 'Model FC (Backtest)';
+            const winnerWmape = manualBetter ? summary.manual_wmape : summary.model_wmape;
+            const winnerAccuracy = manualBetter ? summary.manual_accuracy : summary.model_accuracy;
+            summaryHtml += `
+                <div class="accuracy-comparison-banner">
+                    <span class="comparison-icon">🏆</span>
+                    <span><strong>${winnerLabel}</strong> is more accurate — WMAPE: <strong>${winnerWmape}%</strong>, Accuracy: <strong>${winnerAccuracy}%</strong></span>
+                </div>
+            `;
+        }
+
+        summaryHtml += '<div class="deviation-summary-grid">';
+
         summaryHtml += `
             <div class="summary-card">
                 <div class="summary-value">${summary.total_weeks}</div>
                 <div class="summary-label">Total Weeks</div>
             </div>
         `;
-        
-        if (summary.manual_forecast_weeks > 0) {
+
+        if (hasManual) {
+            const manualAccDisplay = summary.manual_accuracy !== null ? summary.manual_accuracy.toFixed(1) + '%' : '--';
+            const manualWmapeDisplay = summary.manual_wmape !== null ? summary.manual_wmape.toFixed(1) + '%' : '--';
             summaryHtml += `
                 <div class="summary-card">
                     <div class="summary-value">${summary.manual_forecast_weeks}</div>
                     <div class="summary-label">Manual FC Weeks</div>
                 </div>
-                <div class="summary-card ${getDeviationSummaryClass(summary.manual_avg_abs_dev)}">
-                    <div class="summary-value">${summary.manual_avg_abs_dev !== null ? summary.manual_avg_abs_dev.toFixed(1) + '%' : '--'}</div>
-                    <div class="summary-label">Manual Avg |Dev|</div>
+                <div class="summary-card ${getDeviationSummaryClass(summary.manual_wmape)}">
+                    <div class="summary-value">${manualWmapeDisplay}</div>
+                    <div class="summary-label">Manual WMAPE</div>
+                </div>
+                <div class="summary-card ${getDeviationSummaryClass(summary.manual_wmape)}">
+                    <div class="summary-value">${manualAccDisplay}</div>
+                    <div class="summary-label">Manual Accuracy</div>
                 </div>
                 <div class="summary-card">
                     <div class="summary-value">${summary.manual_avg_dev !== null ? (summary.manual_avg_dev > 0 ? '+' : '') + summary.manual_avg_dev.toFixed(1) + '%' : '--'}</div>
@@ -1921,20 +1956,39 @@ function renderHistoricDeviationsTable(deviations, summary, metric) {
                 </div>
             `;
         }
-        
-        if (summary.model_forecast_weeks > 0) {
+
+        if (hasModel) {
+            const modelAccDisplay = summary.model_accuracy !== null ? summary.model_accuracy.toFixed(1) + '%' : '--';
+            const modelWmapeDisplay = summary.model_wmape !== null ? summary.model_wmape.toFixed(1) + '%' : '--';
             summaryHtml += `
                 <div class="summary-card">
                     <div class="summary-value">${summary.model_forecast_weeks}</div>
                     <div class="summary-label">Model FC Weeks</div>
                 </div>
-                <div class="summary-card ${getDeviationSummaryClass(summary.model_avg_abs_dev)}">
-                    <div class="summary-value">${summary.model_avg_abs_dev !== null ? summary.model_avg_abs_dev.toFixed(1) + '%' : '--'}</div>
-                    <div class="summary-label">Model Avg |Dev|</div>
+                <div class="summary-card ${getDeviationSummaryClass(summary.model_wmape)}">
+                    <div class="summary-value">${modelWmapeDisplay}</div>
+                    <div class="summary-label">Model WMAPE</div>
+                </div>
+                <div class="summary-card ${getDeviationSummaryClass(summary.model_wmape)}">
+                    <div class="summary-value">${modelAccDisplay}</div>
+                    <div class="summary-label">Model Accuracy</div>
+                </div>
+                <div class="summary-card">
+                    <div class="summary-value">${summary.model_avg_dev !== null ? (summary.model_avg_dev > 0 ? '+' : '') + summary.model_avg_dev.toFixed(1) + '%' : '--'}</div>
+                    <div class="summary-label">Model Avg Bias</div>
                 </div>
             `;
         }
-        
+
+        if (!hasModel) {
+            summaryHtml += `
+                <div class="summary-card" style="grid-column: span 2;">
+                    <div class="summary-value" style="font-size: 0.85rem; color: var(--text-muted);">Model backtest requires ≥7 data points</div>
+                    <div class="summary-label">Model FC Not Available</div>
+                </div>
+            `;
+        }
+
         summaryHtml += '</div>';
         summaryContainer.innerHTML = summaryHtml;
     }

@@ -17,7 +17,7 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "2.5.0"
+APP_VERSION = "2.6.0"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
@@ -68,6 +68,7 @@ def upload_file():
         
         # Process the file
         data_processor = DataProcessor()
+        data_processor._backtest_cache = {}  # Clear backtest cache on new upload
         success, message = data_processor.load_excel(filepath)
         
         if success:
@@ -914,7 +915,13 @@ def get_status():
 
 @app.route('/api/historic-deviations', methods=['GET'])
 def get_historic_deviations():
-    """Get historic deviations for actuals vs manual forecast and model forecast"""
+    """Get historic deviations for actuals vs manual forecast and model forecast
+    
+    Query parameters:
+    - metric: Metric name (default: 'Net Ordered Units')
+    - marketplace: Marketplace code (default: 'UK')
+    - include_model: Whether to run model backtest (default: 'true')
+    """
     global data_processor
     
     if data_processor is None:
@@ -923,6 +930,7 @@ def get_historic_deviations():
     try:
         metric = request.args.get('metric', 'Net Ordered Units')
         marketplace = request.args.get('marketplace', 'UK')
+        include_model = request.args.get('include_model', 'true').lower() == 'true'
         
         # Get actuals
         actuals_df = data_processor.get_dataframe(metric, marketplace, is_forecast=False)
@@ -940,15 +948,25 @@ def get_historic_deviations():
         if data_processor.has_manual_forecast:
             manual_df = data_processor.get_dataframe(metric, marketplace, is_forecast=True)
         
+        # Get model backtest forecasts if requested
+        model_forecasts = None
+        if include_model:
+            try:
+                model_forecasts = data_processor.generate_historic_model_forecasts(metric, marketplace)
+            except Exception as e:
+                print(f"Model backtest warning: {e}")
+                model_forecasts = None
+        
         # Process each week in actuals
         for idx, row in actuals_df.iterrows():
             week = row['week']
             date = row['ds']
             actual = row['y']
+            date_str = date.strftime('%Y-%m-%d')
             
             record = {
                 'week': week,
-                'date': date.strftime('%Y-%m-%d'),
+                'date': date_str,
                 'actual': actual,
                 'manual_forecast': None,
                 'manual_dev': None,
@@ -970,19 +988,52 @@ def get_historic_deviations():
                         record['manual_dev'] = round(dev, 4)
                         record['manual_dev_pct'] = round(dev_pct, 1)
             
+            # Get model backtest forecast value for this week
+            if model_forecasts is not None and date_str in model_forecasts:
+                model_val = model_forecasts[date_str]
+                record['model_forecast'] = round(model_val, 4)
+                if model_val != 0:
+                    dev = actual - model_val
+                    dev_pct = (dev / model_val) * 100
+                    record['model_dev'] = round(dev, 4)
+                    record['model_dev_pct'] = round(dev_pct, 1)
+            
             deviations.append(record)
         
         # Calculate summary stats
         manual_devs = [d['manual_dev_pct'] for d in deviations if d['manual_dev_pct'] is not None]
+        model_devs = [d['model_dev_pct'] for d in deviations if d['model_dev_pct'] is not None]
+        
+        # Calculate WMAPE for manual FC
+        manual_wmape = None
+        if manual_devs:
+            manual_abs_errors = [abs(d['actual'] - d['manual_forecast']) for d in deviations if d['manual_forecast'] is not None]
+            manual_actuals = [d['actual'] for d in deviations if d['manual_forecast'] is not None]
+            total_manual_actual = sum(manual_actuals)
+            if total_manual_actual > 0:
+                manual_wmape = round(sum(manual_abs_errors) / total_manual_actual * 100, 1)
+        
+        # Calculate WMAPE for model FC
+        model_wmape = None
+        if model_devs:
+            model_abs_errors = [abs(d['actual'] - d['model_forecast']) for d in deviations if d['model_forecast'] is not None]
+            model_actuals = [d['actual'] for d in deviations if d['model_forecast'] is not None]
+            total_model_actual = sum(model_actuals)
+            if total_model_actual > 0:
+                model_wmape = round(sum(model_abs_errors) / total_model_actual * 100, 1)
         
         summary = {
             'total_weeks': len(deviations),
             'manual_forecast_weeks': len(manual_devs),
             'manual_avg_dev': round(sum(manual_devs) / len(manual_devs), 1) if manual_devs else None,
             'manual_avg_abs_dev': round(sum(abs(d) for d in manual_devs) / len(manual_devs), 1) if manual_devs else None,
-            'model_forecast_weeks': 0,
-            'model_avg_dev': None,
-            'model_avg_abs_dev': None
+            'manual_wmape': manual_wmape,
+            'manual_accuracy': round(100 - manual_wmape, 1) if manual_wmape is not None else None,
+            'model_forecast_weeks': len(model_devs),
+            'model_avg_dev': round(sum(model_devs) / len(model_devs), 1) if model_devs else None,
+            'model_avg_abs_dev': round(sum(abs(d) for d in model_devs) / len(model_devs), 1) if model_devs else None,
+            'model_wmape': model_wmape,
+            'model_accuracy': round(100 - model_wmape, 1) if model_wmape is not None else None,
         }
         
         return jsonify({
@@ -991,7 +1042,8 @@ def get_historic_deviations():
             'marketplace': marketplace,
             'deviations': deviations,
             'summary': summary,
-            'has_manual_forecast': data_processor.has_manual_forecast
+            'has_manual_forecast': data_processor.has_manual_forecast,
+            'has_model_backtest': model_forecasts is not None and len(model_devs) > 0
         })
         
     except Exception as e:

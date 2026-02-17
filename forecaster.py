@@ -285,6 +285,106 @@ class Forecaster:
             print(f"Fallback forecast error: {str(e)}")
             return None
     
+    def rolling_backtest(self, df, use_seasonality=True, min_train_size=6, exog_scores=None):
+        """
+        Perform rolling one-step-ahead backtest using SARIMAX.
+        
+        For each week i (where i >= min_train_size), fits a SARIMAX model
+        on data[:i] and generates a 1-step-ahead forecast for week i.
+        
+        When exog_scores is provided, promo scores are included as an exogenous
+        regressor in the SARIMAX model (matching the forward forecast with promo uplift).
+        
+        Parameters:
+        - df: DataFrame with 'ds' (dates) and 'y' (values) columns
+        - use_seasonality: If True, uses seasonal component
+        - min_train_size: Minimum number of training observations before first forecast
+        - exog_scores: Optional list of promo scores aligned with df rows.
+                       When provided, used as exogenous variable in SARIMAX.
+        
+        Returns:
+        - List of dicts: [{date, actual, predicted}, ...]
+        """
+        from statsmodels.tsa.statespace.sarimax import SARIMAX
+        
+        df = self.prepare_data(df)
+        if df is None or len(df) < min_train_size + 1:
+            return None
+        
+        # Validate exog_scores alignment
+        has_exog = (exog_scores is not None and len(exog_scores) == len(df))
+        
+        results = []
+        
+        # Define SARIMAX parameters (same as forward forecast)
+        if use_seasonality and len(df) >= 8:
+            order = (1, 1, 1)
+            seasonal_order = (1, 0, 1, 4)
+        else:
+            order = (1, 1, 1)
+            seasonal_order = (0, 0, 0, 0)
+        
+        for i in range(min_train_size, len(df)):
+            train = df.iloc[:i].copy()
+            actual_date = df.iloc[i]['ds']
+            actual_value = df.iloc[i]['y']
+            
+            try:
+                # Build time series
+                y = train.set_index('ds')['y']
+                y.index = pd.DatetimeIndex(y.index).to_period('W').to_timestamp()
+                y = y.groupby(y.index).mean()
+                y = y.asfreq('W-MON', method='ffill')
+                
+                if len(y) < 4:
+                    continue
+                
+                # Dynamically choose seasonal order based on training size
+                if use_seasonality and len(y) >= 8:
+                    s_order = seasonal_order
+                else:
+                    s_order = (0, 0, 0, 0)
+                
+                # Prepare exogenous data for training and forecast step
+                train_exog = None
+                step_exog = None
+                if has_exog:
+                    try:
+                        train_scores = exog_scores[:i]
+                        train_exog_series = pd.Series(train_scores, index=train['ds'])
+                        train_exog_series.index = pd.DatetimeIndex(train_exog_series.index).to_period('W').to_timestamp()
+                        train_exog_series = train_exog_series.groupby(train_exog_series.index).mean()
+                        train_exog_series = train_exog_series.reindex(y.index).fillna(train_exog_series.mean())
+                        train_exog = train_exog_series.values.reshape(-1, 1)
+                        step_exog = np.array([[exog_scores[i]]])
+                    except Exception:
+                        train_exog = None
+                        step_exog = None
+                
+                model = SARIMAX(
+                    y,
+                    exog=train_exog,
+                    order=order,
+                    seasonal_order=s_order,
+                    enforce_stationarity=False,
+                    enforce_invertibility=False
+                )
+                
+                fitted = model.fit(disp=False, maxiter=100)
+                fc = fitted.get_forecast(steps=1, exog=step_exog)
+                predicted = max(0, float(fc.predicted_mean.values[0]))
+                
+                results.append({
+                    'date': actual_date,
+                    'actual': float(actual_value),
+                    'predicted': predicted
+                })
+            except Exception:
+                # Skip weeks where model fitting fails
+                continue
+        
+        return results if results else None
+    
     def generate_forecast(self, df, model_type='sarimax', use_seasonality=True):
         """
         Main method to generate forecast

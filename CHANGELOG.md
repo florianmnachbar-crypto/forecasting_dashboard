@@ -5,6 +5,27 @@ All notable changes to the Amazon Haul EU5 Forecasting Dashboard will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-02-17
+
+### Added
+- **Historic Model Backtest**: Rolling one-step-ahead SARIMAX backtest in the Historic Deviations tab
+  - For each historic week (starting from week 7+), fits a SARIMAX model on all prior data and predicts that week
+  - **Includes promo scores as exogenous regressor** — the backtest uses the same SARIMAX+promo configuration as the forward forecast, ensuring a fair accuracy comparison
+  - Net Ordered Units derived from driver backtests (Transits × CVR × UPO)
+  - Results cached per metric/marketplace (cleared on file re-upload)
+- **Accuracy Comparison**: Summary cards show WMAPE, Accuracy, and Avg Bias for both Manual FC and Model FC side-by-side
+- **Winner Banner**: 🏆 comparison banner showing which forecast source (Manual or Model) is more accurate
+- **Loading Indicator**: Spinner shown while backtest computes (~5-15 seconds)
+- **Promo Performance Assessment** (from commit 610d23a): Expected vs actual promo level cards in Latest Week tab
+- **HTML Export Improvements** (from commit 9ad1f87): Light mode default, toggle visibility fixes, promo toggle defaults, discount % sub-filter
+
+### Changed
+- Historic Deviations tab now shows Model FC and Model Dev % columns populated with backtest data
+- Deviation chart includes Model FC trace (cyan dashed line with diamond markers)
+- `Forecaster.rolling_backtest()` now accepts optional `exog_scores` parameter for promo-aware backtesting
+
+---
+
 ## [2.5.0] - 2026-02-11
 
 ### Added
