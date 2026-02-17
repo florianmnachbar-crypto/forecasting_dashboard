@@ -17,12 +17,18 @@ from forecaster import Forecaster
 app = Flask(__name__)
 
 # App version
-APP_VERSION = "2.6.0"
+APP_VERSION = "2.7.0"
 
 # Configuration
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 app.config['ALLOWED_EXTENSIONS'] = {'xlsx', 'xls'}
+
+# SharePoint inputs file path (auto-load on startup if accessible)
+SHAREPOINT_INPUTS_FILE = r"\\share.amazon.com@SSL\DavWWWRoot\sites\eu-haul\Shared Documents\Forecasting\inputs_forecasting.xlsx"
+
+# Local fallback file
+LOCAL_INPUTS_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'data', 'inputs_forecasting.xlsx')
 
 # Ensure upload folder exists
 os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
@@ -1584,11 +1590,63 @@ def serve_static(filename):
     return send_from_directory('static', filename)
 
 
+def auto_load_data():
+    """Try to auto-load inputs file from SharePoint, then local fallback."""
+    global data_processor, current_file
+    
+    # Try SharePoint first
+    if os.path.exists(SHAREPOINT_INPUTS_FILE):
+        print(f"  → Found inputs file on SharePoint")
+        try:
+            data_processor = DataProcessor()
+            data_processor._backtest_cache = {}
+            success, message = data_processor.load_excel(SHAREPOINT_INPUTS_FILE)
+            if success:
+                data_processor.calculate_eu5_totals()
+                current_file = "inputs_forecasting.xlsx (SharePoint)"
+                print(f"  ✓ Auto-loaded from SharePoint: {message}")
+                return True
+            else:
+                print(f"  ✗ SharePoint file load failed: {message}")
+                data_processor = None
+        except Exception as e:
+            print(f"  ✗ SharePoint load error: {e}")
+            data_processor = None
+    else:
+        print(f"  → SharePoint not accessible (VPN/offline?)")
+    
+    # Fallback to local file
+    if os.path.exists(LOCAL_INPUTS_FILE):
+        print(f"  → Trying local fallback: {LOCAL_INPUTS_FILE}")
+        try:
+            data_processor = DataProcessor()
+            data_processor._backtest_cache = {}
+            success, message = data_processor.load_excel(LOCAL_INPUTS_FILE)
+            if success:
+                data_processor.calculate_eu5_totals()
+                current_file = "inputs_forecasting.xlsx (local)"
+                print(f"  ✓ Auto-loaded from local: {message}")
+                return True
+            else:
+                print(f"  ✗ Local file load failed: {message}")
+                data_processor = None
+        except Exception as e:
+            print(f"  ✗ Local load error: {e}")
+            data_processor = None
+    
+    print("  ⚠ No input file found. Upload manually via dashboard.")
+    return False
+
+
 if __name__ == '__main__':
     print("\n" + "="*60)
-    print("  Amazon Haul EU5 Forecasting Dashboard")
+    print("  Amazon Haul EU5 Forecasting Dashboard v" + APP_VERSION)
     print("="*60)
-    print("\n  Starting server at http://localhost:5000")
+    
+    print("\n  Auto-loading data...")
+    auto_load_data()
+    
+    print(f"\n  Starting server at http://localhost:5000")
     print("  Press Ctrl+C to stop the server\n")
     print("="*60 + "\n")
     

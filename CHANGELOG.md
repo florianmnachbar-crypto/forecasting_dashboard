@@ -5,6 +5,21 @@ All notable changes to the Amazon Haul EU5 Forecasting Dashboard will be documen
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-02-17
+
+### Added
+- **SharePoint Auto-Load**: Dashboard now auto-loads `inputs_forecasting.xlsx` from SharePoint on startup (falls back to local `data/` copy if offline)
+- **QuickSight Processor → inputs_forecasting.xlsx**: Processor now writes actuals directly to the SharePoint inputs file (Actuals sheet) alongside the reporting file
+- **QuickSight Processor → Promo Regressors**: Processor now reads WW Haul Marketing file and updates Promo Regressors sheet in inputs_forecasting.xlsx automatically
+
+### Changed
+- App version bumped to 2.7.0
+- `process_quicksight_exports.py`: Added `update_inputs_file()` and `update_inputs_promo_regressors()` functions, both called at end of `process_exports()`
+- `app.py`: Added `auto_load_data()` function and SharePoint/local file path constants
+- One-click weekly workflow: Run QuickSight Processor → all files updated → start dashboard (auto-loads latest data)
+
+---
+
 ## [2.6.0] - 2026-02-17
 
 ### Added
