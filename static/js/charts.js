@@ -1865,14 +1865,19 @@ function renderHistoricDeviationsTable(deviations, summary, metric, hasModelBack
 
     if (!tableBody) return;
 
-    // Sort deviations by date ascending for chart (oldest first)
-    const sortedForChart = [...deviations].sort((a, b) => new Date(a.date) - new Date(b.date));
+    // Limit to trailing 26 weeks (~6 months) to exclude early outliers
+    const TRAILING_WEEKS = 26;
+    const sortedAll = [...deviations].sort((a, b) => new Date(b.date) - new Date(a.date));
+    const trimmed = sortedAll.slice(0, TRAILING_WEEKS);
+
+    // Sort ascending for chart (oldest first)
+    const sortedForChart = [...trimmed].sort((a, b) => new Date(a.date) - new Date(b.date));
 
     // Render the deviation chart
     renderDeviationChart(sortedForChart, metric);
 
-    // Sort deviations by date descending for table (most recent first)
-    const sortedDeviations = [...deviations].sort((a, b) => new Date(b.date) - new Date(a.date));
+    // Table: most recent first (already sorted descending)
+    const sortedDeviations = trimmed;
 
     let html = '';
 
@@ -1973,10 +1978,9 @@ function renderHistoricDeviationsTable(deviations, summary, metric, hasModelBack
                 <div class="summary-card ${getDeviationSummaryClass(summary.model_wmape)}">
                     <div class="summary-value">${modelAccDisplay}</div>
                     <div class="summary-label">Model Accuracy (T6W)</div>
-                </div>
                 <div class="summary-card">
                     <div class="summary-value">${summary.model_avg_dev !== null ? (summary.model_avg_dev > 0 ? '+' : '') + summary.model_avg_dev.toFixed(1) + '%' : '--'}</div>
-                    <div class="summary-label">Model Avg Bias (T6W)</div>
+                    <div class="summary-label">Model Avg Bias</div>
                 </div>
             `;
         }
