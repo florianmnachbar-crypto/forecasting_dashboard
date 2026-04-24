@@ -1,0 +1,771 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>International Take-Home Pay Calculator</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+    <style>
+        :root {
+            --bg: #0f1117;
+            --card: #1a1d2e;
+            --card-hover: #222640;
+            --border: #2a2e45;
+            --text: #e4e6f0;
+            --text-dim: #8a8fa8;
+            --accent: #6c63ff;
+            --green: #2ecc71;
+            --red: #e74c3c;
+            --de: #ffcc00;
+            --it: #009246;
+            --es: #c60b1e;
+            --uk: #00247d;
+        }
+        * { margin:0; padding:0; box-sizing:border-box; }
+        body {
+            font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            min-height: 100vh;
+            line-height: 1.5;
+        }
+        .header {
+            background: linear-gradient(135deg, #1a1d2e 0%, #2a1d4e 100%);
+            padding: 2rem 2rem 1.5rem;
+            border-bottom: 1px solid var(--border);
+        }
+        .header h1 {
+            font-size: 1.8rem;
+            font-weight: 700;
+            margin-bottom: .3rem;
+        }
+        .header p { color: var(--text-dim); font-size: .95rem; }
+        .container { max-width: 1400px; margin: 0 auto; padding: 1.5rem; }
+
+        /* Input Section */
+        .input-section {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem 2rem;
+            margin-bottom: 1.5rem;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 1.5rem;
+            align-items: flex-end;
+        }
+        .input-group { display:flex; flex-direction:column; gap:.4rem; }
+        .input-group label {
+            font-size: .85rem;
+            color: var(--text-dim);
+            font-weight: 600;
+            text-transform: uppercase;
+            letter-spacing: .5px;
+        }
+        .input-group input, .input-group select {
+            background: var(--bg);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: .65rem 1rem;
+            color: var(--text);
+            font-size: 1.05rem;
+            width: 220px;
+            transition: border-color .2s;
+        }
+        .input-group input:focus, .input-group select:focus {
+            outline: none;
+            border-color: var(--accent);
+        }
+        .btn {
+            background: var(--accent);
+            color: #fff;
+            border: none;
+            border-radius: 8px;
+            padding: .7rem 2rem;
+            font-size: 1rem;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity .2s;
+            height: fit-content;
+        }
+        .btn:hover { opacity: .85; }
+
+        /* Toggle */
+        .toggle-bar {
+            display: flex;
+            gap: .5rem;
+            margin-bottom: 1.5rem;
+        }
+        .toggle-btn {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: .5rem 1.2rem;
+            color: var(--text-dim);
+            font-size: .9rem;
+            cursor: pointer;
+            font-weight: 600;
+            transition: all .2s;
+        }
+        .toggle-btn.active {
+            background: var(--accent);
+            color: #fff;
+            border-color: var(--accent);
+        }
+
+        /* Country Cards Grid */
+        .cards-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 1.2rem;
+            margin-bottom: 2rem;
+        }
+        .country-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+            transition: transform .15s, border-color .15s;
+        }
+        .country-card:hover { transform: translateY(-2px); border-color: #444; }
+        .card-header {
+            padding: 1rem 1.2rem;
+            display: flex;
+            align-items: center;
+            gap: .8rem;
+            font-size: 1.15rem;
+            font-weight: 700;
+            border-bottom: 1px solid var(--border);
+        }
+        .card-header .flag { font-size: 1.6rem; }
+        .card-header.de { border-left: 4px solid var(--de); }
+        .card-header.it { border-left: 4px solid var(--it); }
+        .card-header.es { border-left: 4px solid var(--es); }
+        .card-header.uk { border-left: 4px solid var(--uk); }
+        .card-body { padding: 1.2rem; }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: .45rem 0;
+            font-size: .92rem;
+        }
+        .stat-row .label { color: var(--text-dim); }
+        .stat-row .value { font-weight: 600; font-variant-numeric: tabular-nums; }
+        .stat-row.net {
+            border-top: 2px solid var(--accent);
+            margin-top: .5rem;
+            padding-top: .7rem;
+            font-size: 1.1rem;
+        }
+        .stat-row.net .value { color: var(--green); font-size: 1.15rem; }
+        .eff-rate {
+            text-align: center;
+            margin-top: .8rem;
+            padding: .5rem;
+            background: rgba(108,99,255,.1);
+            border-radius: 8px;
+            font-size: .9rem;
+        }
+        .eff-rate span { color: var(--accent); font-weight: 700; font-size: 1.1rem; }
+
+        /* Charts */
+        .charts-section {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .chart-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1.5rem;
+        }
+        .chart-card h3 {
+            font-size: 1rem;
+            margin-bottom: 1rem;
+            color: var(--text-dim);
+            font-weight: 600;
+        }
+        .chart-container { position: relative; width:100%; }
+
+        /* Detail Tables */
+        .details-section { margin-bottom: 2rem; }
+        .details-section h2 {
+            font-size: 1.2rem;
+            margin-bottom: 1rem;
+            color: var(--text-dim);
+        }
+        .detail-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+            gap: 1.2rem;
+        }
+        .detail-card {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            overflow: hidden;
+        }
+        .detail-card .dh {
+            padding: .8rem 1.2rem;
+            font-weight: 700;
+            font-size: 1rem;
+            cursor: pointer;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            user-select: none;
+        }
+        .detail-card .dh:hover { background: var(--card-hover); }
+        .detail-card .dh .arrow { transition: transform .2s; }
+        .detail-card .dh.open .arrow { transform: rotate(180deg); }
+        .detail-body { padding: 0 1.2rem 1rem; }
+        .detail-body table { width:100%; border-collapse:collapse; font-size:.88rem; }
+        .detail-body th { text-align:left; color:var(--text-dim); padding:.4rem 0; font-weight:600; border-bottom:1px solid var(--border); }
+        .detail-body td { padding:.4rem 0; }
+        .detail-body td:last-child { text-align:right; font-variant-numeric:tabular-nums; font-weight:600; }
+        .detail-body tr.subtotal td { border-top:1px solid var(--border); font-weight:700; }
+        .detail-body tr.net-row td { border-top:2px solid var(--accent); font-weight:700; color:var(--green); font-size:.95rem; }
+
+        .note {
+            background: var(--card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 1rem 1.5rem;
+            color: var(--text-dim);
+            font-size: .82rem;
+            line-height: 1.7;
+        }
+        .note strong { color: var(--text); }
+
+        @media (max-width: 800px) {
+            .charts-section { grid-template-columns: 1fr; }
+            .input-section { flex-direction: column; }
+            .input-group input { width: 100%; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="header">
+    <div class="container" style="padding:0;">
+        <h1>🌍 International Take-Home Pay Calculator</h1>
+        <p>Compare net income across Germany, Italy, Spain &amp; the UK — Single, 35 y/o, no children, 2025 rates</p>
+    </div>
+</div>
+
+<div class="container">
+
+    <!-- Input -->
+    <div class="input-section">
+        <div class="input-group">
+            <label>Annual Gross Salary (EUR)</label>
+            <input type="text" id="grossInput" value="60,000" inputmode="numeric">
+        </div>
+        <div class="input-group">
+            <label>EUR → GBP Rate</label>
+            <input type="number" id="fxRate" value="0.845" step="0.001" min="0.01">
+        </div>
+        <button class="btn" onclick="calculate()">Calculate</button>
+    </div>
+
+    <!-- Toggle -->
+    <div class="toggle-bar">
+        <button class="toggle-btn active" data-period="yearly" onclick="setPeriod('yearly',this)">Yearly</button>
+        <button class="toggle-btn" data-period="monthly" onclick="setPeriod('monthly',this)">Monthly</button>
+    </div>
+
+    <!-- Country Cards -->
+    <div class="cards-grid" id="cardsGrid"></div>
+
+    <!-- Charts -->
+    <div class="charts-section">
+        <div class="chart-card">
+            <h3>Comparison — Tax vs Social vs Net</h3>
+            <div class="chart-container"><canvas id="barChart"></canvas></div>
+        </div>
+        <div class="chart-card">
+            <h3>Effective Total Deduction Rate (%)</h3>
+            <div class="chart-container"><canvas id="rateChart"></canvas></div>
+        </div>
+    </div>
+
+    <!-- Detailed Breakdowns -->
+    <div class="details-section">
+        <h2>📋 Detailed Breakdown</h2>
+        <div class="detail-grid" id="detailGrid"></div>
+    </div>
+
+    <!-- Notes -->
+    <div class="note">
+        <strong>Disclaimer:</strong> This calculator provides <strong>estimates</strong> based on 2025 tax rates and standard assumptions.
+        Actual take-home pay may differ due to individual circumstances, regional variations (especially in Italy &amp; Spain),
+        employer-specific schemes, and legislative changes. Germany: no church tax, Tax Class I; Italy: average regional/municipal surcharges;
+        Spain: combined state + average regional IRPF brackets; UK: figures shown in GBP, converted at the rate above.
+        Social security contribution ceilings applied where relevant. This is not financial advice.
+    </div>
+</div>
+
+<script>
+// ========== UTILITY ==========
+const fmt = (v, currency='EUR') => {
+    const sym = currency === 'GBP' ? '£' : '€';
+    return sym + Math.round(v).toLocaleString('en');
+};
+const pct = v => (v * 100).toFixed(1) + '%';
+let period = 'yearly';
+let results = {};
+
+function parseGross(s) {
+    return parseFloat(String(s).replace(/[^0-9.]/g, '')) || 0;
+}
+
+function setPeriod(p, btn) {
+    period = p;
+    document.querySelectorAll('.toggle-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    renderCards();
+    renderDetails();
+    renderCharts();
+}
+
+// ========== GERMANY ==========
+function calcGermany(gross) {
+    // 2025 rates
+    const pensionRate = 0.093, pensionCap = 7550 * 12;
+    const healthRate = 0.073 + 0.017, healthCap = 5512.50 * 12; // avg supplement 1.7%
+    const unemployRate = 0.013, unemployCap = 7550 * 12;
+    const careRate = 0.017 + 0.006, careCap = 5512.50 * 12; // childless surcharge
+
+    const pension = Math.min(gross, pensionCap) * pensionRate;
+    const health = Math.min(gross, healthCap) * healthRate;
+    const unemploy = Math.min(gross, unemployCap) * unemployRate;
+    const care = Math.min(gross, careCap) * careRate;
+    const socialTotal = pension + health + unemploy + care;
+
+    // Taxable income (social deducted for tax purposes as Vorsorgeaufwendungen approximation)
+    // Simplified: we apply the standard deductions
+    const taxableIncome = Math.max(0, gross - socialTotal);
+
+    // German income tax 2025 formula (approximate zones)
+    let tax = 0;
+    if (taxableIncome <= 11784) {
+        tax = 0;
+    } else if (taxableIncome <= 17005) {
+        const y = (taxableIncome - 11784) / 10000;
+        tax = (922.98 * y + 1400) * y;
+    } else if (taxableIncome <= 66760) {
+        const z = (taxableIncome - 17005) / 10000;
+        tax = (181.19 * z + 2397) * z + 1025.38;
+    } else if (taxableIncome <= 277825) {
+        tax = 0.42 * taxableIncome - 10636.31;
+    } else {
+        tax = 0.45 * taxableIncome - 18971.24;
+    }
+    tax = Math.max(0, Math.floor(tax));
+
+    // Solidarity surcharge: 5.5% if tax > 18,130 (with gliding zone)
+    let soli = 0;
+    if (tax > 18130) {
+        soli = tax * 0.055;
+    }
+    soli = Math.round(soli * 100) / 100;
+
+    const totalTax = tax + soli;
+    const net = gross - socialTotal - totalTax;
+
+    return {
+        country: 'Germany', code: 'de', flag: '🇩🇪', currency: 'EUR',
+        gross,
+        items: [
+            { label: 'Pension Insurance (9.3%)', value: pension },
+            { label: 'Health Insurance (~9.0%)', value: health },
+            { label: 'Unemployment (1.3%)', value: unemploy },
+            { label: 'Long-term Care (2.3%)', value: care },
+        ],
+        socialTotal,
+        taxItems: [
+            { label: 'Income Tax', value: tax },
+            { label: 'Solidarity Surcharge', value: soli },
+        ],
+        totalTax,
+        net,
+        effRate: (socialTotal + totalTax) / gross
+    };
+}
+
+// ========== ITALY ==========
+function calcItaly(gross) {
+    // Employee social contributions ~9.19%
+    const socialRate = 0.0919;
+    const socialTotal = gross * socialRate;
+
+    // Taxable income after social
+    const taxable = gross - socialTotal;
+
+    // IRPEF 2025 brackets
+    let irpef = 0;
+    if (taxable <= 28000) {
+        irpef = taxable * 0.23;
+    } else if (taxable <= 50000) {
+        irpef = 28000 * 0.23 + (taxable - 28000) * 0.35;
+    } else {
+        irpef = 28000 * 0.23 + 22000 * 0.35 + (taxable - 50000) * 0.43;
+    }
+
+    // Employee tax deduction (detrazione lavoro dipendente) 2025
+    let deduction = 0;
+    if (taxable <= 15000) {
+        deduction = 1955;
+        if (deduction > irpef) deduction = irpef;
+    } else if (taxable <= 28000) {
+        deduction = 1910 + 1190 * ((28000 - taxable) / 13000);
+    } else if (taxable <= 50000) {
+        deduction = 1910 * ((50000 - taxable) / 22000);
+    } else {
+        deduction = 0;
+    }
+
+    irpef = Math.max(0, irpef - deduction);
+
+    // Regional surcharge ~1.73%, Municipal ~0.8%
+    const regional = taxable * 0.0173;
+    const municipal = taxable * 0.008;
+
+    const totalTax = irpef + regional + municipal;
+    const net = gross - socialTotal - totalTax;
+
+    return {
+        country: 'Italy', code: 'it', flag: '🇮🇹', currency: 'EUR',
+        gross,
+        items: [
+            { label: 'INPS Social Contributions (9.19%)', value: socialTotal },
+        ],
+        socialTotal,
+        taxItems: [
+            { label: 'IRPEF (after deduction)', value: irpef },
+            { label: 'Regional Surcharge (~1.73%)', value: regional },
+            { label: 'Municipal Surcharge (~0.8%)', value: municipal },
+        ],
+        totalTax,
+        net,
+        effRate: (socialTotal + totalTax) / gross
+    };
+}
+
+// ========== SPAIN ==========
+function calcSpain(gross) {
+    // Social security employee share 2025
+    // Common contingencies 4.7%, Unemployment 1.55%, Training 0.1% = 6.35%
+    const socialRate = 0.0635;
+    const socialCap = 4720.50 * 12; // monthly cap * 12
+    const socialTotal = Math.min(gross, socialCap) * socialRate;
+
+    // Taxable income
+    const personalAllowance = 5550;
+    const generalExpenses = 2000;
+    const socialDeduction = socialTotal;
+    const taxBase = Math.max(0, gross - socialDeduction);
+    const taxableIncome = Math.max(0, taxBase - generalExpenses);
+    const minimumPersonal = personalAllowance;
+
+    // Combined state + avg regional IRPF brackets 2025
+    function applyBrackets(income) {
+        const brackets = [
+            { limit: 12450, rate: 0.19 },
+            { limit: 20200, rate: 0.24 },
+            { limit: 35200, rate: 0.30 },
+            { limit: 60000, rate: 0.37 },
+            { limit: 300000, rate: 0.45 },
+            { limit: Infinity, rate: 0.47 },
+        ];
+        let tax = 0, prev = 0;
+        for (const b of brackets) {
+            if (income <= prev) break;
+            const taxableSlice = Math.min(income, b.limit) - prev;
+            tax += taxableSlice * b.rate;
+            prev = b.limit;
+        }
+        return tax;
+    }
+
+    const grossTax = applyBrackets(taxableIncome);
+    const minTax = applyBrackets(minimumPersonal);
+    const irpf = Math.max(0, grossTax - minTax);
+
+    const totalTax = irpf;
+    const net = gross - socialTotal - totalTax;
+
+    return {
+        country: 'Spain', code: 'es', flag: '🇪🇸', currency: 'EUR',
+        gross,
+        items: [
+            { label: 'Social Security (6.35%)', value: socialTotal },
+        ],
+        socialTotal,
+        taxItems: [
+            { label: 'IRPF (state + regional)', value: irpf },
+        ],
+        totalTax,
+        net,
+        effRate: (socialTotal + totalTax) / gross
+    };
+}
+
+// ========== UK ==========
+function calcUK(grossEUR, fxRate) {
+    const gross = grossEUR * fxRate; // GBP
+
+    // Personal allowance 2025/26
+    let personalAllowance = 12570;
+    if (gross > 100000) {
+        personalAllowance = Math.max(0, 12570 - (gross - 100000) / 2);
+    }
+    const taxable = Math.max(0, gross - personalAllowance);
+
+    // Income tax bands
+    let incomeTax = 0;
+    if (taxable <= 37700) {
+        incomeTax = taxable * 0.20;
+    } else if (taxable <= 125140) {
+        incomeTax = 37700 * 0.20 + (taxable - 37700) * 0.40;
+    } else {
+        incomeTax = 37700 * 0.20 + (125140 - 37700) * 0.40 + (taxable - 125140) * 0.45;
+    }
+
+    // National Insurance 2025/26
+    // Employee: 8% on £12,570–£50,270, 2% above
+    const niThreshold = 12570;
+    const niUpper = 50270;
+    let ni = 0;
+    if (gross > niThreshold) {
+        const band1 = Math.min(gross, niUpper) - niThreshold;
+        ni += Math.max(0, band1) * 0.08;
+        if (gross > niUpper) {
+            ni += (gross - niUpper) * 0.02;
+        }
+    }
+
+    const totalTax = incomeTax;
+    const socialTotal = ni;
+    const net = gross - totalTax - socialTotal;
+
+    return {
+        country: 'United Kingdom', code: 'uk', flag: '🇬🇧', currency: 'GBP',
+        gross,
+        grossEUR: grossEUR,
+        items: [
+            { label: 'National Insurance', value: ni },
+        ],
+        socialTotal,
+        taxItems: [
+            { label: 'Income Tax', value: incomeTax },
+        ],
+        totalTax,
+        net,
+        netEUR: net / fxRate,
+        effRate: (socialTotal + totalTax) / gross
+    };
+}
+
+// ========== MAIN CALCULATE ==========
+function calculate() {
+    const grossEUR = parseGross(document.getElementById('grossInput').value);
+    const fxRate = parseFloat(document.getElementById('fxRate').value) || 0.845;
+    if (grossEUR <= 0) return;
+
+    results = {
+        de: calcGermany(grossEUR),
+        it: calcItaly(grossEUR),
+        es: calcSpain(grossEUR),
+        uk: calcUK(grossEUR, fxRate),
+    };
+
+    renderCards();
+    renderCharts();
+    renderDetails();
+}
+
+// ========== RENDER CARDS ==========
+function renderCards() {
+    const grid = document.getElementById('cardsGrid');
+    grid.innerHTML = '';
+    const div = period === 'monthly' ? 12 : 1;
+    const fxRate = parseFloat(document.getElementById('fxRate').value) || 0.845;
+
+    for (const key of ['de','it','es','uk']) {
+        const r = results[key];
+        if (!r) continue;
+        const cur = r.currency;
+        const isUK = key === 'uk';
+
+        const card = document.createElement('div');
+        card.className = 'country-card';
+        card.innerHTML = `
+            <div class="card-header ${key}">
+                <span class="flag">${r.flag}</span>
+                ${r.country}
+            </div>
+            <div class="card-body">
+                <div class="stat-row">
+                    <span class="label">Gross Income</span>
+                    <span class="value">${fmt(r.gross/div, cur)}${isUK ? ' <small style="color:var(--text-dim)">(€'+fmt(r.grossEUR/div)+')</small>' : ''}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Social Contributions</span>
+                    <span class="value" style="color:var(--red)">−${fmt(r.socialTotal/div, cur)}</span>
+                </div>
+                <div class="stat-row">
+                    <span class="label">Income Tax</span>
+                    <span class="value" style="color:var(--red)">−${fmt(r.totalTax/div, cur)}</span>
+                </div>
+                <div class="stat-row net">
+                    <span class="label">Net Income</span>
+                    <span class="value">${fmt(r.net/div, cur)}${isUK ? ' <small style="color:var(--text-dim)">(€'+fmt(r.netEUR/div)+')</small>' : ''}</span>
+                </div>
+                <div class="eff-rate">Effective deduction rate: <span>${pct(r.effRate)}</span></div>
+            </div>
+        `;
+        grid.appendChild(card);
+    }
+}
+
+// ========== RENDER CHARTS ==========
+let barChartInst = null, rateChartInst = null;
+
+function renderCharts() {
+    const div = period === 'monthly' ? 12 : 1;
+    const fxRate = parseFloat(document.getElementById('fxRate').value) || 0.845;
+    const countries = ['de','it','es','uk'];
+    const labels = countries.map(k => results[k]?.country || '');
+
+    // For comparison, convert UK net to EUR
+    const socialData = countries.map(k => {
+        let v = results[k]?.socialTotal || 0;
+        if (k === 'uk') v = v / fxRate;
+        return Math.round(v / div);
+    });
+    const taxData = countries.map(k => {
+        let v = results[k]?.totalTax || 0;
+        if (k === 'uk') v = v / fxRate;
+        return Math.round(v / div);
+    });
+    const netData = countries.map(k => {
+        let v = results[k]?.net || 0;
+        if (k === 'uk') v = v / fxRate;
+        return Math.round(v / div);
+    });
+    const rateData = countries.map(k => +(((results[k]?.effRate || 0) * 100).toFixed(1)));
+    const countryColors = ['#ffcc00','#009246','#c60b1e','#00247d'];
+
+    // Bar chart
+    if (barChartInst) barChartInst.destroy();
+    barChartInst = new Chart(document.getElementById('barChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [
+                { label: 'Net Income (€)', data: netData, backgroundColor: '#2ecc71' },
+                { label: 'Income Tax (€)', data: taxData, backgroundColor: '#e74c3c' },
+                { label: 'Social Contributions (€)', data: socialData, backgroundColor: '#f39c12' },
+            ]
+        },
+        options: {
+            responsive: true,
+            plugins: {
+                legend: { labels: { color: '#e4e6f0' } },
+                tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': €' + ctx.raw.toLocaleString() } }
+            },
+            scales: {
+                x: { stacked: true, ticks: { color: '#8a8fa8' }, grid: { color: 'rgba(255,255,255,.05)' } },
+                y: { stacked: true, ticks: { color: '#8a8fa8', callback: v => '€'+v.toLocaleString() }, grid: { color: 'rgba(255,255,255,.08)' } }
+            }
+        }
+    });
+
+    // Rate chart
+    if (rateChartInst) rateChartInst.destroy();
+    rateChartInst = new Chart(document.getElementById('rateChart'), {
+        type: 'bar',
+        data: {
+            labels,
+            datasets: [{
+                label: 'Effective Deduction Rate (%)',
+                data: rateData,
+                backgroundColor: countryColors,
+                borderRadius: 6,
+            }]
+        },
+        options: {
+            responsive: true,
+            indexAxis: 'y',
+            plugins: {
+                legend: { display: false },
+                tooltip: { callbacks: { label: ctx => ctx.raw + '%' } }
+            },
+            scales: {
+                x: { ticks: { color: '#8a8fa8', callback: v => v+'%' }, grid: { color: 'rgba(255,255,255,.08)' }, max: 60 },
+                y: { ticks: { color: '#e4e6f0' }, grid: { display: false } }
+            }
+        }
+    });
+}
+
+// ========== RENDER DETAILS ==========
+function renderDetails() {
+    const grid = document.getElementById('detailGrid');
+    grid.innerHTML = '';
+    const div = period === 'monthly' ? 12 : 1;
+
+    for (const key of ['de','it','es','uk']) {
+        const r = results[key];
+        if (!r) continue;
+        const cur = r.currency;
+
+        let rows = '';
+        rows += `<tr><th colspan="2">Social Contributions</th></tr>`;
+        for (const item of r.items) {
+            rows += `<tr><td>${item.label}</td><td>${fmt(item.value/div, cur)}</td></tr>`;
+        }
+        rows += `<tr class="subtotal"><td>Total Social</td><td>${fmt(r.socialTotal/div, cur)}</td></tr>`;
+        rows += `<tr><th colspan="2" style="padding-top:.6rem">Taxes</th></tr>`;
+        for (const item of r.taxItems) {
+            rows += `<tr><td>${item.label}</td><td>${fmt(item.value/div, cur)}</td></tr>`;
+        }
+        rows += `<tr class="subtotal"><td>Total Tax</td><td>${fmt(r.totalTax/div, cur)}</td></tr>`;
+        rows += `<tr class="subtotal"><td>Total Deductions</td><td>${fmt((r.socialTotal+r.totalTax)/div, cur)}</td></tr>`;
+        rows += `<tr class="net-row"><td>Net Income</td><td>${fmt(r.net/div, cur)}</td></tr>`;
+
+        const card = document.createElement('div');
+        card.className = 'detail-card';
+        card.innerHTML = `
+            <div class="dh open" onclick="this.classList.toggle('open'); this.nextElementSibling.style.display = this.classList.contains('open') ? 'block' : 'none';">
+                <span>${r.flag} ${r.country}</span>
+                <span class="arrow">▾</span>
+            </div>
+            <div class="detail-body">
+                <table>${rows}</table>
+            </div>
+        `;
+        grid.appendChild(card);
+    }
+}
+
+// Format input with commas
+document.getElementById('grossInput').addEventListener('input', function() {
+    let val = this.value.replace(/[^0-9]/g, '');
+    if (val) this.value = parseInt(val).toLocaleString('en');
+});
+
+// Enter key
+document.getElementById('grossInput').addEventListener('keyup', function(e) {
+    if (e.key === 'Enter') calculate();
+});
+
+// Auto-calculate on load
+calculate();
+</script>
+
+</body>
+</html>
